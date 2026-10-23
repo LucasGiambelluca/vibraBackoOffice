@@ -13,7 +13,7 @@ y haga seguimiento de las tareas generales, clasificado por las 6 áreas del eve
 
 - Presupuestos: rubros, cotizaciones comparables, aprobación, totales multimoneda.
 - Proveedores con datos de contacto.
-- To-do list general del evento.
+- To-do list general del evento, con recordatorios por email y en la app.
 - Usuarios con login y roles admin / editor.
 
 ### Fuera de alcance (Etapa 2)
