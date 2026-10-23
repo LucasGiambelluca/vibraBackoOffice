@@ -17,3 +17,11 @@ export function crearDb(databaseUrl?: string): Db {
   mkdirSync(PGLITE_DIR, { recursive: true });
   return drizzlePglite({ client: new PGlite(PGLITE_DIR), schema }) as unknown as Db;
 }
+
+/** Cierra la conexión subyacente (para scripts: libera el lock de PGlite antes de salir). */
+export async function cerrarDb(db: Db): Promise<void> {
+  type Cliente = { end?: () => Promise<void>; close?: () => Promise<void> };
+  const cliente = (db as unknown as { $client: Cliente }).$client;
+  // postgres-js expone end(); PGlite, close().
+  await (cliente.end ? cliente.end() : cliente.close?.());
+}

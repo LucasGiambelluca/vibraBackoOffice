@@ -1,8 +1,23 @@
+import { esProduccion } from "@/lib/entorno";
 import { crearDb, type Db } from "./client";
 
-// En dev, Next recarga módulos: se reutiliza la conexión (PGlite admite un solo proceso).
+// Se cachea en globalThis: Next recarga módulos en dev y PGlite admite un solo proceso.
 const globalDb = globalThis as unknown as { __vibraDb?: Db };
 
-export const db = globalDb.__vibraDb ?? crearDb(process.env.DATABASE_URL || undefined);
+function obtenerDb(): Db {
+  if (!globalDb.__vibraDb) {
+    const url = process.env.DATABASE_URL || undefined;
+    if (!url && esProduccion()) throw new Error("DATABASE_URL es obligatorio en producción");
+    globalDb.__vibraDb = crearDb(url);
+  }
+  return globalDb.__vibraDb;
+}
 
-if (process.env.NODE_ENV !== "production") globalDb.__vibraDb = db;
+// Perezosa: importar `db` no abre la base (así `next build` no levanta PGlite en cada worker).
+export const db = new Proxy({} as Db, {
+  get(_destino, prop) {
+    const real = obtenerDb();
+    const valor = Reflect.get(real, prop, real);
+    return typeof valor === "function" ? valor.bind(real) : valor;
+  },
+});

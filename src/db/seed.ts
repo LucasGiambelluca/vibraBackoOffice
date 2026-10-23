@@ -1,5 +1,5 @@
 import { crearUsuario, nuevoUsuarioSchema } from "@/lib/users";
-import { crearDb } from "./client";
+import { cerrarDb, crearDb } from "./client";
 
 async function main() {
   const [email, nombre, password] = process.argv.slice(2);
@@ -8,9 +8,13 @@ async function main() {
     process.exit(1);
   }
 
-  const db = crearDb(process.env.DATABASE_URL || undefined);
   const datos = nuevoUsuarioSchema.parse({ email, nombre, password, rol: "admin" });
-  await crearUsuario(db, datos);
+  const db = crearDb(process.env.DATABASE_URL || undefined);
+  try {
+    await crearUsuario(db, datos);
+  } finally {
+    await cerrarDb(db);
+  }
   console.log(`Admin creado: ${datos.email}`);
   process.exit(0);
 }
