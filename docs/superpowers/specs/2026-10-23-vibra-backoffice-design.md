@@ -78,15 +78,59 @@ activaciones, cobertura Vibo TV. Mientras tanto se gestionan como rubros o tarea
 | Borrar registros | | ✓ |
 | Configuración (usuarios, tipos de cambio, rubros) | | ✓ |
 
-## 4. Arquitectura
+## 4. Recordatorios
 
-- **Next.js** (App Router) + TypeScript, desplegado en **Vercel** (runtime Node.js).
-- **UI**: Tailwind CSS + shadcn/ui.
-- **Base de datos**: Postgres provisto por Vercel Marketplace (ej. Neon), acceso con
-  **Drizzle ORM** y migraciones versionadas.
-- **Auth**: proveedor del Vercel Marketplace (ej. Clerk) con alta por invitación.
-  El rol vive en la tabla `usuario` de la app.
-- **Archivos**: Vercel Blob privado; subida directa desde el cliente; PDF ≤ 4.5 MB.
+### Datos
+
+| Entidad | Campos |
+|---|---|
+| **Recordatorio** | id, tarea, fecha_hora (timestamptz), origen (automático / manual), tipo automático (3_dias_antes / dia_vencimiento / vencida_diario), creado por, enviado_at, cancelado_at |
+| **Notificación** | id, usuario, tarea, mensaje, leída, creada_at |
+| **Usuario** (campo extra) | recibir_emails (bool, default sí) |
+
+### Reglas
+
+1. Al crear una tarea con fecha límite, o al cambiarla, se (re)generan los automáticos:
+   **3 días antes** y **el día del vencimiento**, ambos a las 09:00 hora de La Paz.
+   Los automáticos pendientes anteriores se cancelan.
+2. **Vencida**: mientras la tarea no esté *hecha* y su fecha límite haya pasado, se
+   envía un recordatorio diario a las 09:00. El worker genera el del día siguiente al
+   enviar el de hoy.
+3. **Manuales**: el creador de la tarea (o un admin) agrega recordatorios en fecha y
+   hora puntual. Precisión: 1 minuto.
+4. Al marcar la tarea como *hecha* (o borrarla) se cancelan todos sus recordatorios pendientes.
+5. Destinatario: el responsable de la tarea; si no tiene, todos los admins.
+6. Zona horaria del evento: `America/La_Paz`. Fechas se guardan en UTC.
+
+### Funcionamiento
+
+- Contenedor **worker** con `node-cron`, corre **cada minuto**.
+- Toma recordatorios con `fecha_hora <= now()`, `enviado_at IS NULL`, `cancelado_at IS NULL`
+  usando `SELECT ... FOR UPDATE SKIP LOCKED` y, en la misma transacción, crea la
+  notificación y marca `enviado_at` → sin duplicados aunque corran dos workers.
+- El email se envía después del commit. Si falla, se registra el error y se reintenta
+  en la corrida siguiente (máx. 5 intentos, campo `intentos_email`).
+- Email por **SMTP** (Nodemailer), con link directo a la tarea. Se omite si el usuario
+  tiene `recibir_emails = false`.
+- En la app: **campanita** en el encabezado con cantidad de no leídas y lista
+  (marcar leída / marcar todas).
+
+## 5. Arquitectura
+
+Desplegado en **VPS Linux propio** con Docker y dominio propio. Sin servicios cloud externos
+salvo el servidor SMTP.
+
+| Pieza | Tecnología |
+|---|---|
+| App | **Next.js** (App Router) + TypeScript, `output: 'standalone'`, contenedor Docker |
+| UI | Tailwind CSS + shadcn/ui |
+| Base de datos | **Postgres 17** en contenedor, volumen persistente; **Drizzle ORM** + migraciones |
+| Auth | **Better Auth** embebido: email + contraseña, alta solo por invitación de admin, sesiones en Postgres. Rol en tabla `usuario`. |
+| Adjuntos | PDF en volumen `uploads/`, servidos por ruta protegida (requiere sesión). Máx. 10 MB. |
+| Worker | Contenedor con `node-cron`, comparte código y DB con la app |
+| Email | SMTP configurable por variables de entorno (`SMTP_HOST`, `SMTP_USER`, ...) |
+| Proxy / HTTPS | **Caddy** con certificado automático (Let's Encrypt) |
+| Orquestación | `docker-compose.yml`: `caddy`, `app`, `worker`, `db`, `backup` |
 
 ### Módulos
 
@@ -94,8 +138,10 @@ activaciones, cobertura Vibo TV. Mientras tanto se gestionan como rubros o tarea
 |---|---|
 | `lib/money.ts` | Funciones puras: total de cotización, ahorro, conversión, total del evento. Sin dependencias de DB. |
 | `lib/permissions.ts` | `can(rol, accion)`: única fuente de verdad de permisos. |
+| `lib/reminders.ts` | Funciones puras: calcular fechas de recordatorios automáticos a partir de la fecha límite. |
 | `db/schema.ts` | Definición de tablas Drizzle. |
-| `db/seed.ts` | Áreas y rubros iniciales. |
+| `db/seed.ts` | Áreas, rubros iniciales y primer admin. |
+| `worker/index.ts` | Loop de envío de recordatorios. |
 | `app/...` | Pantallas por sección, cada una con sus server actions. |
 
 ### Flujo de una escritura
@@ -103,22 +149,31 @@ activaciones, cobertura Vibo TV. Mientras tanto se gestionan como rubros o tarea
 Formulario → server action → valida sesión y `can(rol, accion)` → valida input con
 **Zod** → escribe en DB (transacción si toca varias filas) → `revalidatePath`.
 
-## 5. Manejo de errores
+## 6. Manejo de errores
 
 - Validación Zod en servidor; errores por campo devueltos al formulario.
 - Acción no permitida → error 403 con mensaje claro, sin cambios en DB.
 - Aprobación en transacción: nunca dos cotizaciones aprobadas en un rubro.
 - Tipo de cambio faltante → advertencia visible en totales.
-- Adjunto > 4.5 MB o no PDF → rechazado en cliente y servidor.
+- Adjunto > 10 MB o no PDF → rechazado en cliente y servidor.
+- Falla de SMTP → reintento en la próxima corrida; la notificación en la app ya quedó creada.
+- Worker caído → los recordatorios pendientes se envían al reiniciar (no se pierden).
 
-## 6. Pruebas
+## 7. Pruebas
 
 - **Unitarias (Vitest)**: `money.ts` (1 y 2 días, descuento 0 / 100, conversión,
-  tipo de cambio faltante, redondeo) y `permissions.ts` (matriz completa).
-- **Integración**: transacción de aprobación contra DB de prueba.
-- **E2E (Playwright)**: login → cargar cotización → aprobar → total correcto en tablero.
+  tipo de cambio faltante, redondeo), `permissions.ts` (matriz completa) y
+  `reminders.ts` (fechas automáticas, zona horaria La Paz, cambio de fecha límite).
+- **Integración** (Postgres de prueba en Docker): transacción de aprobación; worker
+  procesa cada recordatorio una sola vez; cancelación al marcar *hecha*.
+- **E2E (Playwright)**: login → cargar cotización → aprobar → total correcto en tablero;
+  crear tarea con recordatorio → aparece en campanita.
 
-## 7. Deploy
+## 8. Deploy y operación
 
-Repositorio en GitHub conectado a Vercel. Cada push genera preview; `main` va a
-producción. Variables de entorno gestionadas con `vercel env`.
+- Repositorio en GitHub. En el VPS: `git pull && docker compose up -d --build`;
+  las migraciones corren al iniciar el contenedor `app`.
+- Variables de entorno en `.env` del VPS (no versionado); `.env.example` en el repo.
+- **Backups**: contenedor `backup` hace `pg_dump` diario y conserva 14 días; los
+  adjuntos (`uploads/`) se incluyen en el mismo backup.
+- Dominio apuntado al VPS; Caddy gestiona HTTPS.
