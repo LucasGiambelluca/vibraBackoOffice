@@ -1,19 +1,20 @@
 import "server-only";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { auth } from "@/lib/auth";
-import { can, type Accion } from "@/lib/permissions";
+import { exigir, type Accion } from "@/lib/permissions";
 
-/** Usuario logueado; si no hay sesión redirige a /login. */
-export async function usuarioActual() {
+/** Usuario logueado; si no hay sesión redirige a /login. Una sola consulta por request. */
+export const usuarioActual = cache(async () => {
   const sesion = await auth.api.getSession({ headers: await headers() });
   if (!sesion) redirect("/login");
   return { ...sesion.user, role: sesion.user.role ?? "" };
-}
+});
 
-/** Para server actions: corta con error si el rol no tiene permiso. */
+/** Usuario logueado con permiso para `accion`; si no lo tiene lanza ErrorPermiso. */
 export async function exigirPermiso(accion: Accion) {
   const usuario = await usuarioActual();
-  if (!can(usuario.role, accion)) throw new Error("No autorizado");
+  exigir(usuario, accion);
   return usuario;
 }

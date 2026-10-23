@@ -2,41 +2,30 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { esRol } from "@/lib/permissions";
-import { exigirPermiso } from "@/lib/session";
-import { borrarUsuario, cambiarRol, crearUsuario, ErrorUsuario, nuevoUsuarioSchema } from "@/lib/users";
+import type { Db } from "@/db/client";
+import type { Resultado } from "@/lib/acciones";
+import type { Actor } from "@/lib/permissions";
+import { usuarioActual } from "@/lib/session";
+import { altaUsuario, bajaUsuario, cambioDeRol } from "./operaciones";
 
 const RUTA = "/configuracion/usuarios";
 
-export type Resultado = { ok: true } | { ok: false; error: string };
+type Operacion = (db: Db, actor: Actor, datos: unknown) => Promise<Resultado>;
 
-export async function crearUsuarioAction(_previo: Resultado | null, formData: FormData): Promise<Resultado> {
-  await exigirPermiso("configurar");
-
-  const parsed = nuevoUsuarioSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
-
-  try {
-    await crearUsuario(db, parsed.data);
-  } catch (error) {
-    if (error instanceof ErrorUsuario) return { ok: false, error: error.message };
-    throw error;
-  }
-
-  revalidatePath(RUTA);
-  return { ok: true };
+async function ejecutar(operacion: Operacion, formData: FormData): Promise<Resultado> {
+  const resultado = await operacion(db, await usuarioActual(), Object.fromEntries(formData));
+  if (resultado.ok) revalidatePath(RUTA);
+  return resultado;
 }
 
-export async function cambiarRolAction(userId: string, formData: FormData): Promise<void> {
-  const actor = await exigirPermiso("configurar");
-  const rol = String(formData.get("rol"));
-  if (!esRol(rol)) throw new Error("Rol inválido");
-  await cambiarRol(db, actor.id, userId, rol);
-  revalidatePath(RUTA);
+export async function crearUsuarioAction(_previo: Resultado | null, formData: FormData) {
+  return ejecutar(altaUsuario, formData);
 }
 
-export async function borrarUsuarioAction(userId: string): Promise<void> {
-  const actor = await exigirPermiso("configurar");
-  await borrarUsuario(db, actor.id, userId);
-  revalidatePath(RUTA);
+export async function cambiarRolAction(_previo: Resultado | null, formData: FormData) {
+  return ejecutar(cambioDeRol, formData);
+}
+
+export async function borrarUsuarioAction(_previo: Resultado | null, formData: FormData) {
+  return ejecutar(bajaUsuario, formData);
 }

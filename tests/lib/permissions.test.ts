@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { can, esRol, type Accion } from "@/lib/permissions";
+import { ErrorNegocio } from "@/lib/acciones";
+import { can, ErrorPermiso, esRol, exigir, type Accion } from "@/lib/permissions";
 
 const TODAS: Accion[] = ["ver", "editar", "aprobar", "borrar", "configurar"];
 
@@ -27,5 +28,16 @@ describe("esRol", () => {
     expect(esRol("editor")).toBe(true);
     expect(esRol("Admin")).toBe(false);
     expect(esRol("")).toBe(false);
+  });
+});
+
+describe("exigir", () => {
+  it("lanza ErrorPermiso (un ErrorNegocio) si el rol no tiene permiso", () => {
+    expect(() => exigir({ id: "1", role: "editor" }, "configurar")).toThrow(ErrorPermiso);
+    expect(new ErrorPermiso()).toBeInstanceOf(ErrorNegocio);
+  });
+
+  it("no hace nada si tiene permiso", () => {
+    expect(() => exigir({ id: "1", role: "admin" }, "configurar")).not.toThrow();
   });
 });

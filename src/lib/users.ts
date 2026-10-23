@@ -3,19 +3,31 @@ import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
 import { account, user } from "@/db/schema";
+import { ErrorNegocio } from "@/lib/acciones";
 import { ROLES, type Rol } from "@/lib/permissions";
 
 export const nuevoUsuarioSchema = z.object({
-  nombre: z.string().trim().min(2, "El nombre es muy corto"),
-  email: z.string().trim().toLowerCase().pipe(z.email("Email inválido")),
-  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
+  nombre: z.string("Falta el nombre").trim().min(2, "El nombre es muy corto"),
+  email: z.string("Falta el email").trim().toLowerCase().pipe(z.email("Email inválido")),
+  password: z
+    .string("Falta la contraseña")
+    .min(8, "La contraseña debe tener al menos 8 caracteres")
+    .max(128, "La contraseña no puede tener más de 128 caracteres"),
   rol: z.enum(ROLES, "Rol inválido"),
 });
 
 export type NuevoUsuario = z.infer<typeof nuevoUsuarioSchema>;
 
 /** Error de regla de negocio: su mensaje se puede mostrar al usuario. */
-export class ErrorUsuario extends Error {}
+export class ErrorUsuario extends ErrorNegocio {}
+
+/** Violación de UNIQUE de Postgres; drizzle la envuelve en `cause` según el driver. */
+export function esViolacionUnica(error: unknown): boolean {
+  for (let e = error; e instanceof Object; e = (e as { cause?: unknown }).cause) {
+    if ((e as { code?: unknown }).code === "23505") return true;
+  }
+  return false;
+}
 
 export async function crearUsuario(db: Db, datos: NuevoUsuario): Promise<string> {
   const existente = await db.select({ id: user.id }).from(user).where(eq(user.email, datos.email)).limit(1);
@@ -25,16 +37,22 @@ export async function crearUsuario(db: Db, datos: NuevoUsuario): Promise<string>
   const hash = await hashPassword(datos.password);
 
   // Mismo formato que crea Better Auth en un registro con email y contraseña.
-  await db.transaction(async (tx) => {
-    await tx.insert(user).values({ id, name: datos.nombre, email: datos.email, emailVerified: true, role: datos.rol });
-    await tx.insert(account).values({
-      id: crypto.randomUUID(),
-      accountId: id,
-      providerId: "credential",
-      userId: id,
-      password: hash,
+  try {
+    await db.transaction(async (tx) => {
+      await tx.insert(user).values({ id, name: datos.nombre, email: datos.email, emailVerified: true, role: datos.rol });
+      await tx.insert(account).values({
+        id: crypto.randomUUID(),
+        accountId: id,
+        providerId: "credential",
+        userId: id,
+        password: hash,
+      });
     });
-  });
+  } catch (error) {
+    // Dos altas simultáneas con el mismo email pasan el chequeo de arriba.
+    if (esViolacionUnica(error)) throw new ErrorUsuario("Ya existe un usuario con ese email");
+    throw error;
+  }
 
   return id;
 }
@@ -48,11 +66,13 @@ export async function listarUsuarios(db: Db) {
 
 export async function cambiarRol(db: Db, actorId: string, userId: string, rol: Rol): Promise<void> {
   if (actorId === userId) throw new ErrorUsuario("No podés cambiar tu propio rol");
-  await db.update(user).set({ role: rol }).where(eq(user.id, userId));
+  const filas = await db.update(user).set({ role: rol }).where(eq(user.id, userId)).returning({ id: user.id });
+  if (filas.length === 0) throw new ErrorUsuario("El usuario no existe");
 }
 
 export async function borrarUsuario(db: Db, actorId: string, userId: string): Promise<void> {
   if (actorId === userId) throw new ErrorUsuario("No podés borrar tu propio usuario");
   // session y account se borran en cascada.
-  await db.delete(user).where(eq(user.id, userId));
+  const filas = await db.delete(user).where(eq(user.id, userId)).returning({ id: user.id });
+  if (filas.length === 0) throw new ErrorUsuario("El usuario no existe");
 }
