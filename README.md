@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Back office Vibra Bolivia 2027
 
-## Getting Started
+Sistema de gestión interno del evento. Next.js + Drizzle + Better Auth.
 
-First, run the development server:
+## Requisitos
+
+- Node.js 20 o superior
+- En local no hace falta Postgres: sin `DATABASE_URL` se usa PGlite (Postgres embebido) en `.data/pglite`.
+
+## Configuración
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+En `.env.local` completá `BETTER_AUTH_SECRET` (`openssl rand -base64 32`). Dejá `DATABASE_URL` vacío para usar PGlite; en el VPS apuntalo al Postgres. En producción la app no arranca sin `DATABASE_URL` ni `BETTER_AUTH_SECRET`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Base de datos
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run db:migrate
+npm run db:seed -- <email> "<nombre>" <contraseña>   # crea el primer admin
+```
 
-## Learn More
+El resto de los usuarios los da de alta un admin desde Configuración → Usuarios (no hay registro público).
 
-To learn more about Next.js, take a look at the following resources:
+## Desarrollo
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run dev    # http://localhost:3000
+npm test       # Vitest (usa PGlite en memoria, no toca .data/)
+npm run lint
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Importante: PGlite admite un solo proceso
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`.data/pglite` solo puede abrirlo un proceso a la vez. **No corras `db:migrate` ni `db:seed` con `npm run dev` encendido**: pará el servidor, corré el script y volvé a levantarlo.
