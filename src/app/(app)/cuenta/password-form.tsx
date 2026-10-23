@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 export function PasswordForm() {
   const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [pendiente, setPendiente] = useState(false);
 
   async function onSubmit(evento: React.FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -25,13 +26,18 @@ export function PasswordForm() {
       return;
     }
 
+    setPendiente(true);
     const { error } = await authClient.changePassword({
       currentPassword: String(datos.get("actual")),
       newPassword: nueva,
       revokeOtherSessions: true,
-    });
+    }).finally(() => setPendiente(false));
     if (error) {
-      setMensaje({ ok: false, texto: "La contraseña actual es incorrecta" });
+      const texto =
+        error.code === "INVALID_PASSWORD"
+          ? "La contraseña actual es incorrecta"
+          : (error.message ?? "No se pudo cambiar la contraseña");
+      setMensaje({ ok: false, texto });
       return;
     }
     form.reset();
@@ -55,7 +61,9 @@ export function PasswordForm() {
       {mensaje && (
         <p className={cn("text-sm", mensaje.ok ? "text-green-600" : "text-destructive")}>{mensaje.texto}</p>
       )}
-      <Button type="submit">Cambiar contraseña</Button>
+      <Button type="submit" disabled={pendiente}>
+        {pendiente ? "Guardando…" : "Cambiar contraseña"}
+      </Button>
     </form>
   );
 }
