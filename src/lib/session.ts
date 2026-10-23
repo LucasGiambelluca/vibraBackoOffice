@@ -8,12 +8,12 @@ import { can, type Accion } from "@/lib/permissions";
 export async function usuarioActual() {
   const sesion = await auth.api.getSession({ headers: await headers() });
   if (!sesion) redirect("/login");
-  return sesion.user;
+  return { ...sesion.user, role: sesion.user.role ?? "" };
 }
 
 /** Para server actions: corta con error si el rol no tiene permiso. */
 export async function exigirPermiso(accion: Accion) {
   const usuario = await usuarioActual();
-  if (!can(usuario.role ?? "", accion)) throw new Error("No autorizado");
+  if (!can(usuario.role, accion)) throw new Error("No autorizado");
   return usuario;
 }
