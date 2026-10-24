@@ -1,0 +1,102 @@
+# Producción en el VPS. Uso: docker compose up -d --build (ver docs/deploy.md).
+
+x-entorno: &entorno
+  NODE_ENV: production
+  DATABASE_URL: postgres://vibra:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}@db:5432/vibra
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Falta BETTER_AUTH_SECRET en .env}
+  BETTER_AUTH_URL: https://${DOMINIO:?Falta DOMINIO en .env}
+  UPLOADS_DIR: /data/uploads
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURE: ${SMTP_SECURE:-false}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+
+x-herramientas: &herramientas
+  build: { context: ., target: herramientas }
+  image: vibra-herramientas
+  environment: *entorno
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vibra
+      POSTGRES_USER: vibra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vibra -d vibra"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Aplica las migraciones y termina. La app y el worker arrancan después.
+  migrate:
+    <<: *herramientas
+    command: ["npm", "run", "db:migrate"]
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+
+  app:
+    build: { context: ., target: app }
+    image: vibra-app
+    restart: unless-stopped
+    environment: *entorno
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/salud').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    <<: *herramientas
+    command: ["npm", "run", "worker"]
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMINIO: ${DOMINIO}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+  backup:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["bash", "/backup.sh"]
+    volumes:
+      - ./deploy/backup.sh:/backup.sh:ro
+      - backups:/backups
+      - uploads:/uploads:ro
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  db:
+  uploads:
+  backups:
+  caddy_data:
+  caddy_config:
