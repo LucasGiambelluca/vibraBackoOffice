@@ -40,3 +40,10 @@ npm run lint
 ## Adjuntos
 
 Los PDF de las cotizaciones se guardan en `UPLOADS_DIR` (por defecto `.data/uploads`, fuera de git) y se descargan por `/api/adjuntos/<nombre>`, que exige sesión. En el VPS, `UPLOADS_DIR` tiene que ser un volumen persistente incluido en el backup.
+
+## Recordatorios
+
+Un worker revisa cada minuto los recordatorios vencidos, crea las notificaciones (campanita) y manda los emails por SMTP.
+
+- **En desarrollo:** poné `WORKER_EN_APP=true` en `.env.local` y el worker corre dentro de `npm run dev` (PGlite no admite un segundo proceso). Sin `SMTP_HOST` los emails se imprimen en la consola.
+- **En el VPS:** `WORKER_EN_APP` vacío y `npm run worker` en su propio contenedor, con `DATABASE_URL` y las variables `SMTP_*`.
