@@ -37,7 +37,9 @@ function useAccion(accion: AccionFormulario, redirigir?: string) {
       return;
     }
     startTransition(async () => {
-      const resultado = await accion(datos);
+      // Si la acción redirige desde el servidor, no llega resultado: navega Next.
+      const resultado: Resultado | undefined = await accion(datos);
+      if (!resultado) return;
       setEstado(resultado);
       alTerminar?.(resultado);
       if (resultado.ok && redirigir) router.push(redirigir);
@@ -98,7 +100,6 @@ export function BotonAccion({
   texto,
   enviando,
   confirmar = false,
-  redirigir,
   variant = "outline",
 }: {
   accion: AccionFormulario;
@@ -106,10 +107,9 @@ export function BotonAccion({
   texto: string;
   enviando: string;
   confirmar?: boolean;
-  redirigir?: string;
   variant?: "default" | "outline" | "ghost" | "destructive";
 }) {
-  const { estado, pendiente, enviar } = useAccion(accion, redirigir);
+  const { estado, pendiente, enviar } = useAccion(accion);
   const [confirmando, setConfirmando] = useState(false);
 
   function onSubmit(evento: React.FormEvent<HTMLFormElement>) {

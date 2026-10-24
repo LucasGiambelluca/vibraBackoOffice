@@ -36,7 +36,6 @@ export default async function ProveedorPage({ params }: PageProps<"/proveedores/
             texto="Borrar proveedor"
             enviando="Borrando…"
             variant="destructive"
-            redirigir="/proveedores"
             confirmar
           />
         )}
