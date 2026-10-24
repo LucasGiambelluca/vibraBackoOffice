@@ -1,4 +1,4 @@
-import { and, asc, eq, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import { notificacion, recordatorio, tarea, user } from "@/db/schema";
 import type { EnviarEmail } from "@/lib/email";
@@ -69,13 +69,20 @@ export async function procesarRecordatorios(db: Db, ahora = new Date()): Promise
   });
 }
 
+/** Un email reclamado no lo vuelve a tomar ningún worker durante este tiempo. */
+export const VENTANA_RECLAMO_MS = 10 * 60_000;
+
+export type EmailReclamado = { id: string; tareaId: string; mensaje: string; intentos: number; email: string };
+
 /**
- * Manda los emails de las notificaciones pendientes. Si uno falla se reintenta en la
- * próxima corrida; después de MAX_INTENTOS_EMAIL queda como fallido.
+ * Reclama un lote de emails pendientes en una transacción corta: les suma el intento y
+ * marca `email_intento_at`, así otro worker (o una corrida después de un crash) no los
+ * retoma hasta pasada la ventana. Los que ya agotaron los intentos quedan fallidos.
  */
-export async function enviarEmailsPendientes(db: Db, enviar: EnviarEmail, urlBase: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    const pendientes = await tx
+export async function reclamarEmails(db: Db, ahora = new Date()): Promise<EmailReclamado[]> {
+  const limite = new Date(ahora.getTime() - VENTANA_RECLAMO_MS);
+  return db.transaction(async (tx) => {
+    const filas = await tx
       .select({
         id: notificacion.id,
         tareaId: notificacion.tareaId,
@@ -85,27 +92,63 @@ export async function enviarEmailsPendientes(db: Db, enviar: EnviarEmail, urlBas
       })
       .from(notificacion)
       .innerJoin(user, eq(notificacion.usuarioId, user.id))
-      .where(eq(notificacion.emailEstado, "pendiente"))
+      .where(
+        and(
+          eq(notificacion.emailEstado, "pendiente"),
+          or(isNull(notificacion.emailIntentoAt), lte(notificacion.emailIntentoAt, limite)),
+        ),
+      )
       .orderBy(asc(notificacion.createdAt))
       .limit(LOTE)
       .for("update", { of: notificacion, skipLocked: true });
 
-    for (const n of pendientes) {
-      const intentos = n.intentos + 1;
-      try {
-        await enviar({
-          para: n.email,
-          asunto: `Vibra 2027 — ${n.mensaje}`,
-          texto: `${n.mensaje}\n\nVer la tarea: ${urlBase}/tareas/${n.tareaId}`,
-        });
-        await tx.update(notificacion).set({ emailEstado: "enviado", intentosEmail: intentos }).where(eq(notificacion.id, n.id));
-      } catch (error) {
-        console.error(`[worker] no se pudo enviar el email de la notificación ${n.id}`, error);
-        await tx
-          .update(notificacion)
-          .set({ intentosEmail: intentos, emailEstado: intentos >= MAX_INTENTOS_EMAIL ? "fallido" : "pendiente" })
-          .where(eq(notificacion.id, n.id));
-      }
+    const agotadas = filas.filter((n) => n.intentos >= MAX_INTENTOS_EMAIL).map((n) => n.id);
+    if (agotadas.length > 0) {
+      await tx.update(notificacion).set({ emailEstado: "fallido" }).where(inArray(notificacion.id, agotadas));
     }
+    const reclamadas = filas.filter((n) => n.intentos < MAX_INTENTOS_EMAIL);
+    if (reclamadas.length > 0) {
+      await tx
+        .update(notificacion)
+        .set({ intentosEmail: sql`${notificacion.intentosEmail} + 1`, emailIntentoAt: ahora })
+        .where(
+          inArray(
+            notificacion.id,
+            reclamadas.map((n) => n.id),
+          ),
+        );
+    }
+    return reclamadas.map((n) => ({ ...n, intentos: n.intentos + 1 }));
   });
+}
+
+/**
+ * Manda los emails de las notificaciones pendientes, fuera de toda transacción (un SMTP
+ * lento no bloquea filas). Si uno falla se reintenta pasada la ventana de reclamo;
+ * después de MAX_INTENTOS_EMAIL queda como fallido.
+ */
+export async function enviarEmailsPendientes(
+  db: Db,
+  enviar: EnviarEmail,
+  urlBase: string,
+  ahora = new Date(),
+): Promise<void> {
+  const reclamadas = await reclamarEmails(db, ahora);
+  for (const n of reclamadas) {
+    let estado: "enviado" | "pendiente" | "fallido";
+    try {
+      await enviar({
+        para: n.email,
+        asunto: `Vibra 2027 — ${n.mensaje}`,
+        texto: `${n.mensaje}
+
+Ver la tarea: ${urlBase}/tareas/${n.tareaId}`,
+      });
+      estado = "enviado";
+    } catch (error) {
+      console.error(`[worker] no se pudo enviar el email de la notificación ${n.id}`, error);
+      estado = n.intentos >= MAX_INTENTOS_EMAIL ? "fallido" : "pendiente";
+    }
+    await db.update(notificacion).set({ emailEstado: estado }).where(eq(notificacion.id, n.id));
+  }
 }

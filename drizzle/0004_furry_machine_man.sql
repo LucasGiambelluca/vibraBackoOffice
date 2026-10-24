@@ -1,0 +1,1 @@
+ALTER TABLE "notificacion" ADD COLUMN "email_intento_at" timestamp with time zone;

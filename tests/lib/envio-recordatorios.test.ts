@@ -1,9 +1,14 @@
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/db/client";
 import { notificacion, user } from "@/db/schema";
 import type { Email } from "@/lib/email";
-import { enviarEmailsPendientes, MAX_INTENTOS_EMAIL, procesarRecordatorios } from "@/lib/envio-recordatorios";
+import {
+  enviarEmailsPendientes,
+  MAX_INTENTOS_EMAIL,
+  procesarRecordatorios,
+  reclamarEmails,
+} from "@/lib/envio-recordatorios";
 import type { Actor } from "@/lib/permissions";
 import { cambiarEstadoTarea } from "@/lib/tareas";
 import { crearActores } from "../helpers/actores";
@@ -13,11 +18,15 @@ import { AHORA, nuevaTarea, recordatoriosDe } from "../helpers/tareas";
 const DIA_10_NUEVE = new Date("2027-03-10T13:00:00Z");
 // Una tarea que vence el 3/3 creada el 1/3 solo tiene el recordatorio del día (el de 3 días antes ya pasó).
 const DIA_3_NUEVE = new Date("2027-03-03T13:00:00Z");
+const ONCE_MINUTOS = 11 * 60_000;
 const notificaciones = (db: Db) => db.select().from(notificacion);
 
 let db: Db;
 let admin: Actor;
 let editor: Actor;
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 beforeEach(async () => {
   db = await crearDbPrueba();
   ({ admin, editor } = await crearActores(db));
@@ -97,15 +106,53 @@ describe("enviarEmailsPendientes", () => {
     expect(enviados).toHaveLength(1);
   });
 
-  it("si falla reintenta en la próxima corrida, hasta el máximo", async () => {
+  it("si falla reintenta pasada la ventana de reclamo, hasta el máximo", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const fallar = async () => {
       throw new Error("SMTP caído");
     };
+    // Cada intento reclama la fila por 10 minutos: las corridas van separadas por 11.
+    const corrida = (i: number) => new Date(DIA_3_NUEVE.getTime() + i * ONCE_MINUTOS);
     for (let i = 1; i < MAX_INTENTOS_EMAIL; i++) {
-      await enviarEmailsPendientes(db, fallar, "https://vibra.test");
+      await enviarEmailsPendientes(db, fallar, "https://vibra.test", corrida(i));
       expect((await notificaciones(db))[0]).toMatchObject({ emailEstado: "pendiente", intentosEmail: i });
     }
-    await enviarEmailsPendientes(db, fallar, "https://vibra.test");
+    await enviarEmailsPendientes(db, fallar, "https://vibra.test", corrida(MAX_INTENTOS_EMAIL));
+    expect((await notificaciones(db))[0]).toMatchObject({ emailEstado: "fallido", intentosEmail: MAX_INTENTOS_EMAIL });
+  });
+
+  it("un email que falló no se reintenta antes de 10 minutos", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await enviarEmailsPendientes(db, async () => Promise.reject(new Error("SMTP caído")), "https://vibra.test", DIA_3_NUEVE);
+    const enviar = vi.fn(async () => {});
+    await enviarEmailsPendientes(db, enviar, "https://vibra.test", new Date(DIA_3_NUEVE.getTime() + 5 * 60_000));
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("reclamar suma el intento aunque el proceso muera antes de mandar", async () => {
+    const reclamadas = await reclamarEmails(db, DIA_3_NUEVE);
+    expect(reclamadas).toHaveLength(1);
+    expect((await notificaciones(db))[0]).toMatchObject({ emailEstado: "pendiente", intentosEmail: 1 });
+
+    // Reclamada: otro worker no la toma dentro de los 10 minutos.
+    expect(await reclamarEmails(db, new Date(DIA_3_NUEVE.getTime() + 9 * 60_000))).toHaveLength(0);
+    const enviar = vi.fn(async () => {});
+    await enviarEmailsPendientes(db, enviar, "https://vibra.test", new Date(DIA_3_NUEVE.getTime() + 9 * 60_000));
+    expect(enviar).not.toHaveBeenCalled();
+
+    // Pasada la ventana se retoma.
+    await enviarEmailsPendientes(db, enviar, "https://vibra.test", new Date(DIA_3_NUEVE.getTime() + ONCE_MINUTOS));
+    expect(enviar).toHaveBeenCalledTimes(1);
+    expect((await notificaciones(db))[0]).toMatchObject({ emailEstado: "enviado", intentosEmail: 2 });
+  });
+
+  it("si se agotaron los intentos al reclamar y el proceso murió, la próxima vez queda fallido sin mandar", async () => {
+    for (let i = 0; i < MAX_INTENTOS_EMAIL; i++) {
+      await reclamarEmails(db, new Date(DIA_3_NUEVE.getTime() + i * ONCE_MINUTOS));
+    }
+    const enviar = vi.fn(async () => {});
+    await enviarEmailsPendientes(db, enviar, "https://vibra.test", new Date(DIA_3_NUEVE.getTime() + 10 * ONCE_MINUTOS));
+    expect(enviar).not.toHaveBeenCalled();
     expect((await notificaciones(db))[0]).toMatchObject({ emailEstado: "fallido", intentosEmail: MAX_INTENTOS_EMAIL });
   });
 });

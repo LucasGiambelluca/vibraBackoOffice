@@ -7,7 +7,7 @@ export const INTERVALO_MS = 60_000;
 /** Una corrida: notifica los recordatorios vencidos y manda los emails pendientes. */
 export async function correrCiclo(db: Db, enviar: EnviarEmail, urlBase: string, ahora = new Date()): Promise<number> {
   const procesados = await procesarRecordatorios(db, ahora);
-  await enviarEmailsPendientes(db, enviar, urlBase);
+  await enviarEmailsPendientes(db, enviar, urlBase, ahora);
   return procesados;
 }
 

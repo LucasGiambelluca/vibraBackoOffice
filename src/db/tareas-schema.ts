@@ -76,6 +76,8 @@ export const notificacion = pgTable(
       .notNull()
       .default("pendiente"),
     intentosEmail: integer("intentos_email").notNull().default(0),
+    /** Cuándo un worker reclamó el email por última vez: nadie más lo toma por 10 minutos. */
+    emailIntentoAt: timestamp("email_intento_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
