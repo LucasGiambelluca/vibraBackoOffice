@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -183,6 +183,18 @@ describe("con DB", () => {
       expect(existsSync(path.join(process.env.UPLOADS_DIR!, nuevo))).toBe(false);
     });
 
+    it("falla si la fila se borró entre la lectura y la actualización", async () => {
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      await borrarCotizacion(db, a);
+      // La lectura previa todavía la ve.
+      vi.spyOn(db, "select").mockReturnValueOnce({
+        from: () => ({ where: async () => [{ adjunto: null }] }),
+      } as never);
+      await expect(editarCotizacion(db, a, { ...cambios, proveedorId: proveedor })).rejects.toThrow(
+        "La cotización no existe",
+      );
+    });
+
     it("falla si no existe", async () => {
       await expect(editarCotizacion(db, "no-existe", { ...cambios, proveedorId: proveedor })).rejects.toThrow(
         "La cotización no existe",
@@ -199,6 +211,18 @@ describe("con DB", () => {
       expect(await obtenerCotizacion(db, a)).toBeUndefined();
       expect(existsSync(path.join(process.env.UPLOADS_DIR!, nombre))).toBe(false);
       await expect(borrarCotizacion(db, a)).rejects.toThrow("La cotización no existe");
+    });
+
+    it("borra la fila aunque el PDF no se pueda borrar", async () => {
+      const nombre = await guardarPdf(pdf());
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      await editarCotizacion(db, a, { ...COTIZACION, moneda: "BOB", proveedorId: proveedor }, nombre);
+      rmSync(path.join(process.env.UPLOADS_DIR!, nombre));
+      mkdirSync(path.join(process.env.UPLOADS_DIR!, nombre));
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      await borrarCotizacion(db, a);
+      expect(await obtenerCotizacion(db, a)).toBeUndefined();
+      vi.restoreAllMocks();
     });
   });
 

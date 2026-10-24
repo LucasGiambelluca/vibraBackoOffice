@@ -1,5 +1,6 @@
-import { readdirSync } from "node:fs";
-import { beforeEach, describe, expect, it } from "vitest";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import path from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   altaCotizacion,
   aprobacion,
@@ -60,6 +61,22 @@ describe("edicionCotizacion", () => {
     expect(await edicionCotizacion(db, editor, cambios)).toEqual({ ok: true });
     expect(await obtenerCotizacion(db, c.id)).toMatchObject({ precioDia: "900.00", adjunto: null });
     expect(readdirSync(uploads)).toEqual([]);
+  });
+
+  it("si el PDF anterior no se puede borrar, igual queda el nuevo", async () => {
+    await altaCotizacion(db, editor, { ...COTIZACION, rubroId, proveedorId, adjunto: pdf() });
+    const [c] = await listarCotizaciones(db);
+    // Una carpeta con el nombre del PDF viejo hace fallar su borrado (como un EBUSY en Windows).
+    rmSync(path.join(uploads, c.adjunto!));
+    mkdirSync(path.join(uploads, c.adjunto!));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const cambios = { ...COTIZACION, cotizacionId: c.id, proveedorId, adjunto: pdf() };
+    expect(await edicionCotizacion(db, editor, cambios)).toEqual({ ok: true });
+    const nuevo = (await obtenerCotizacion(db, c.id))!.adjunto!;
+    expect(nuevo).not.toBe(c.adjunto);
+    expect(existsSync(path.join(uploads, nuevo))).toBe(true);
+    vi.restoreAllMocks();
   });
 });
 

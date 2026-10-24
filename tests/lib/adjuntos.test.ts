@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { borrarPdf, conPdfNuevo, guardarPdf, hayArchivo, leerPdf } from "@/lib/adjuntos";
 import { MAX_ADJUNTO } from "@/lib/limites";
 import { pdf, usarUploadsTemporal } from "../helpers/presupuestos";
@@ -33,6 +33,15 @@ describe("guardarPdf / leerPdf / borrarPdf", () => {
     await expect(guardarPdf(new File(["hola"], "x.pdf"))).rejects.toThrow("El adjunto debe ser un PDF");
     const grande = new File([new Uint8Array(MAX_ADJUNTO + 1)], "x.pdf");
     await expect(guardarPdf(grande)).rejects.toThrow("El adjunto supera los 10 MB");
+  });
+
+  it("borrarPdf no falla si el archivo no se puede borrar", async () => {
+    const nombre = `${crypto.randomUUID()}.pdf`;
+    mkdirSync(path.join(dir, nombre));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(borrarPdf(nombre)).resolves.toBeUndefined();
+    expect(error).toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 
   it("no lee nombres que no generó (path traversal)", async () => {

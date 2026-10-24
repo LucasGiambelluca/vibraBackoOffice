@@ -63,9 +63,12 @@ export async function editarCotizacion(
   if (!actual) throw new ErrorNegocio("La cotización no existe");
 
   const cambios = adjunto === undefined ? datos : { ...datos, adjunto };
-  await conRestricciones(() => db.update(cotizacion).set(cambios).where(eq(cotizacion.id, id)), {
-    fk: "Proveedor inválido",
-  });
+  const filas = await conRestricciones(
+    () => db.update(cotizacion).set(cambios).where(eq(cotizacion.id, id)).returning({ id: cotizacion.id }),
+    { fk: "Proveedor inválido" },
+  );
+  // Se pudo borrar entre la lectura y la actualización.
+  if (filas.length === 0) throw new ErrorNegocio("La cotización no existe");
   if (adjunto !== undefined && actual.adjunto !== adjunto) await borrarPdf(actual.adjunto);
 }
 

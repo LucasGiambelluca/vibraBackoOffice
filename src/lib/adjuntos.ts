@@ -32,8 +32,17 @@ export async function leerPdf(nombre: string): Promise<Buffer | null> {
   return readFile(path.join(directorio(), nombre)).catch(() => null);
 }
 
+/**
+ * Borra el PDF del disco sin fallar nunca: se llama cuando la fila ya no lo usa, y un
+ * error (p. ej. EBUSY en Windows) solo deja un archivo huérfano, que se registra.
+ */
 export async function borrarPdf(nombre: string | null): Promise<void> {
-  if (nombre && NOMBRE_VALIDO.test(nombre)) await rm(path.join(directorio(), nombre), { force: true });
+  if (!nombre || !NOMBRE_VALIDO.test(nombre)) return;
+  try {
+    await rm(path.join(directorio(), nombre), { force: true });
+  } catch (error) {
+    console.error(`No se pudo borrar el adjunto ${nombre}`, error);
+  }
 }
 
 /** Guarda el PDF (si vino) y corre `fn` con su nombre; si `fn` falla, borra el archivo guardado. */
