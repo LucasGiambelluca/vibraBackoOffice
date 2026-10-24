@@ -44,3 +44,7 @@ next-env.d.ts
 .data/
 !.env.example
 *.pdf
+# E2E
+.next-e2e/
+playwright-report/
+test-results/

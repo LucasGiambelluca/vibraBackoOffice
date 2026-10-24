@@ -2,7 +2,8 @@ import type { Db } from "@/db/client";
 import type { EnviarEmail } from "@/lib/email";
 import { enviarEmailsPendientes, procesarRecordatorios } from "@/lib/envio-recordatorios";
 
-export const INTERVALO_MS = 60_000;
+// Las E2E lo bajan a segundos para no esperar un minuto por cada recordatorio.
+export const INTERVALO_MS = Number(process.env.WORKER_INTERVALO_MS) || 60_000;
 
 /** Una corrida: notifica los recordatorios vencidos y manda los emails pendientes. */
 export async function correrCiclo(db: Db, enviar: EnviarEmail, urlBase: string, ahora = new Date()): Promise<number> {

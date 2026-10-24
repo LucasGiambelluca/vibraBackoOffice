@@ -1,0 +1,5 @@
+# Scripts y config que se ejecutan en Linux: siempre LF (con CRLF bash falla).
+*.sh text eol=lf
+Caddyfile text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
