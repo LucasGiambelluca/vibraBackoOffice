@@ -1,0 +1,207 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { eq } from "drizzle-orm";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { Db } from "@/db/client";
+import { esViolacionUnica } from "@/db/errores";
+import { cotizacion } from "@/db/schema";
+import { guardarPdf } from "@/lib/adjuntos";
+import {
+  aprobarCotizacion,
+  borrarCotizacion,
+  cotizacionSchema,
+  editarCotizacion,
+  idMasBarata,
+  listarCotizaciones,
+  obtenerCotizacion,
+  revertirAprobacion,
+  type CotizacionListada,
+} from "@/lib/cotizaciones";
+import { borrarProveedor } from "@/lib/proveedores";
+import { borrarRubro } from "@/lib/rubros";
+import { guardarTipoCambio } from "@/lib/tipos-cambio";
+import { crearDbPrueba } from "../helpers/db";
+import { COTIZACION, idRubro, nuevaCotizacion, nuevoProveedor, pdf, usarUploadsTemporal } from "../helpers/presupuestos";
+
+const estado = async (db: Db, id: string) => (await obtenerCotizacion(db, id))?.estado;
+
+describe("cotizacionSchema", () => {
+  const base = { ...COTIZACION, proveedorId: "p1" };
+  const error = (extra: Record<string, string>) =>
+    cotizacionSchema.safeParse({ ...base, ...extra }).error?.issues[0].message;
+
+  it("descuento vacío es 0 y acepta coma decimal", () => {
+    expect(cotizacionSchema.parse({ ...base, descuento2Dias: "", precioDia: "1500,5" })).toMatchObject({
+      descuento2Dias: "0",
+      precioDia: "1500.5",
+    });
+  });
+
+  it("rechaza precio 0, descuento > 100 y moneda desconocida", () => {
+    expect(error({ precioDia: "0" })).toBe("El precio debe ser mayor a 0");
+    expect(error({ descuento2Dias: "150" })).toBe("El descuento debe estar entre 0 y 100");
+    expect(error({ moneda: "EUR" })).toBe("Moneda inválida");
+    expect(error({ proveedorId: "" })).toBe("Elegí un proveedor");
+  });
+});
+
+describe("con DB", () => {
+  let db: Db;
+  let sonido: string;
+  let luces: string;
+  let proveedor: string;
+
+  beforeEach(async () => {
+    usarUploadsTemporal();
+    db = await crearDbPrueba();
+    sonido = await idRubro(db, "Sonido");
+    luces = await idRubro(db, "Luces");
+    proveedor = await nuevoProveedor(db);
+  });
+
+  describe("listarCotizaciones", () => {
+    it("calcula totales con los días del rubro", async () => {
+      await nuevaCotizacion(db, sonido, proveedor);
+      const [c] = await listarCotizaciones(db, { rubroId: sonido });
+      expect(c).toMatchObject({
+        rubro: "Sonido",
+        proveedor: "Sonido Andino",
+        estado: "pendiente",
+        precioDia: 1000,
+        descuento2Dias: 10,
+        total: 1800,
+        ahorro: 200,
+        totalBob: 1800,
+      });
+    });
+
+    it("totalBob es null si falta el tipo de cambio", async () => {
+      await nuevaCotizacion(db, sonido, proveedor, { moneda: "USD", precioDia: "100", descuento2Dias: "0" });
+      expect((await listarCotizaciones(db))[0].totalBob).toBeNull();
+
+      await guardarTipoCambio(db, { moneda: "USD", valorBob: "6.96" }, null);
+      expect((await listarCotizaciones(db))[0]).toMatchObject({ total: 200, totalBob: 1392 });
+    });
+
+    it("filtra por rubro, proveedor y estado", async () => {
+      const otro = await nuevoProveedor(db, "Luz Total");
+      await nuevaCotizacion(db, sonido, proveedor);
+      await nuevaCotizacion(db, luces, otro);
+      expect(await listarCotizaciones(db, { rubroId: luces })).toHaveLength(1);
+      expect(await listarCotizaciones(db, { proveedorId: proveedor })).toHaveLength(1);
+      expect(await listarCotizaciones(db, { estado: "aprobada" })).toHaveLength(0);
+      expect(await listarCotizaciones(db)).toHaveLength(2);
+    });
+  });
+
+  describe("aprobarCotizacion", () => {
+    it("aprueba una y descarta las demás del rubro, sin tocar otros rubros", async () => {
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      const b = await nuevaCotizacion(db, sonido, proveedor);
+      const otroRubro = await nuevaCotizacion(db, luces, proveedor);
+
+      await aprobarCotizacion(db, a);
+      expect(await estado(db, a)).toBe("aprobada");
+      expect(await estado(db, b)).toBe("descartada");
+      expect(await estado(db, otroRubro)).toBe("pendiente");
+
+      await aprobarCotizacion(db, b);
+      expect(await estado(db, a)).toBe("descartada");
+      expect(await estado(db, b)).toBe("aprobada");
+    });
+
+    it("falla si la cotización no existe", async () => {
+      await expect(aprobarCotizacion(db, "no-existe")).rejects.toThrow("La cotización no existe");
+    });
+
+    it("la DB impide dos aprobadas en el mismo rubro", async () => {
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      const b = await nuevaCotizacion(db, sonido, proveedor);
+      await aprobarCotizacion(db, a);
+      const error = await db
+        .update(cotizacion)
+        .set({ estado: "aprobada" })
+        .where(eq(cotizacion.id, b))
+        .catch((e: unknown) => e);
+      expect(esViolacionUnica(error)).toBe(true);
+    });
+  });
+
+  describe("revertirAprobacion", () => {
+    it("vuelve a pendiente; las descartadas quedan descartadas", async () => {
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      const b = await nuevaCotizacion(db, sonido, proveedor);
+      await aprobarCotizacion(db, a);
+      await revertirAprobacion(db, a);
+      expect(await estado(db, a)).toBe("pendiente");
+      expect(await estado(db, b)).toBe("descartada");
+    });
+
+    it("falla si no está aprobada", async () => {
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      await expect(revertirAprobacion(db, a)).rejects.toThrow("La cotización no está aprobada");
+    });
+  });
+
+  describe("editarCotizacion", () => {
+    const cambios = { ...COTIZACION, precioDia: "500", descuento2Dias: "0", moneda: "BOB" as const };
+
+    it("cambia los datos y conserva el adjunto si no se indica otro", async () => {
+      const nombre = await guardarPdf(pdf());
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, nombre);
+      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor });
+      expect(await obtenerCotizacion(db, a)).toMatchObject({ precioDia: "500.00", adjunto: nombre });
+    });
+
+    it("al reemplazar o quitar el adjunto borra el archivo anterior", async () => {
+      const viejo = await guardarPdf(pdf());
+      const nuevo = await guardarPdf(pdf());
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, viejo);
+      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, nuevo);
+      expect(existsSync(path.join(process.env.UPLOADS_DIR!, viejo))).toBe(false);
+
+      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, null);
+      expect((await obtenerCotizacion(db, a))?.adjunto).toBeNull();
+      expect(existsSync(path.join(process.env.UPLOADS_DIR!, nuevo))).toBe(false);
+    });
+
+    it("falla si no existe", async () => {
+      await expect(editarCotizacion(db, "no-existe", { ...cambios, proveedorId: proveedor })).rejects.toThrow(
+        "La cotización no existe",
+      );
+    });
+  });
+
+  describe("borrarCotizacion", () => {
+    it("borra la fila y su PDF", async () => {
+      const nombre = await guardarPdf(pdf());
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      await editarCotizacion(db, a, { ...COTIZACION, moneda: "BOB", proveedorId: proveedor }, nombre);
+      await borrarCotizacion(db, a);
+      expect(await obtenerCotizacion(db, a)).toBeUndefined();
+      expect(existsSync(path.join(process.env.UPLOADS_DIR!, nombre))).toBe(false);
+      await expect(borrarCotizacion(db, a)).rejects.toThrow("La cotización no existe");
+    });
+  });
+
+  it("no se puede borrar un rubro ni un proveedor con cotizaciones", async () => {
+    await nuevaCotizacion(db, sonido, proveedor);
+    await expect(borrarRubro(db, sonido)).rejects.toThrow("El rubro tiene cotizaciones: borralas primero");
+    await expect(borrarProveedor(db, proveedor)).rejects.toThrow("El proveedor tiene cotizaciones: borralas primero");
+  });
+});
+
+describe("idMasBarata", () => {
+  const c = (id: string, totalBob: number | null, estado: CotizacionListada["estado"] = "pendiente") =>
+    ({ id, totalBob, estado }) as CotizacionListada;
+
+  it("la de menor total en BOB, ignorando descartadas y sin tipo de cambio", () => {
+    expect(idMasBarata([c("a", 500), c("b", 300, "descartada"), c("c", null), c("d", 400)])).toBe("d");
+  });
+
+  it("null si no hay candidatas", () => {
+    expect(idMasBarata([c("a", null)])).toBeNull();
+  });
+});
