@@ -32,6 +32,37 @@ describe("totalCotizacion y ahorroCotizacion", () => {
     // 33.33 × 2 × 0.85 = 56.661
     expect(totalCotizacion({ precioDia: 33.33, descuento2Dias: 15, dias: 2 })).toBe(56.66);
   });
+
+  it("redondea el medio centavo hacia arriba", () => {
+    // 75 × 2 × 0.7203 = 108.045
+    expect(totalCotizacion({ precioDia: 75, descuento2Dias: 27.97, dias: 2 })).toBe(108.05);
+    // 992.5 × 2 × 0.243 = 482.355
+    expect(totalCotizacion({ precioDia: 992.5, descuento2Dias: 75.7, dias: 2 })).toBe(482.36);
+  });
+
+  it("total + ahorro es exactamente 2 × precio", () => {
+    // 135640.10 × 0.95 = 128858.095 → 128858.10; el ahorro es lo que falta para 135640.10
+    const precio = { precioDia: 67820.05, descuento2Dias: 5, dias: 2 };
+    expect(totalCotizacion(precio)).toBe(128858.1);
+    expect(ahorroCotizacion(precio)).toBe(6782);
+  });
+
+  it("total + ahorro = 2 × precio en centavos para muchos precios", () => {
+    // Generador congruencial: determinístico y sin dependencias.
+    let semilla = 12345;
+    const azar = (max: number) => {
+      semilla = (semilla * 1103515245 + 12345) % 2 ** 31;
+      return semilla % max;
+    };
+    for (let i = 0; i < 500; i++) {
+      // Mitad con descuentos múltiplos de 5, que suelen caer en medio centavo.
+      const descuento2Dias = i % 2 ? azar(10001) / 100 : azar(21) * 5;
+      const precio = { precioDia: (azar(10 ** 9) + 1) / 100, descuento2Dias, dias: 2 };
+      const total = Math.round(totalCotizacion(precio) * 100);
+      const ahorro = Math.round(ahorroCotizacion(precio) * 100);
+      expect(total + ahorro, JSON.stringify(precio)).toBe(Math.round(precio.precioDia * 100) * 2);
+    }
+  });
 });
 
 describe("conversión", () => {
@@ -45,6 +76,12 @@ describe("conversión", () => {
   it("convierte con el tipo de cambio", () => {
     expect(aBob(100, "USD", tipos)).toBe(696);
     expect(desdeBob(696, "USD", tipos)).toBe(100);
+  });
+
+  it("redondea el medio centavo hacia arriba", () => {
+    // 1024.85 × 0.5 = 512.425; 1044.87 / 6.96 = 150.125
+    expect(aBob(1024.85, "USD", { USD: 0.5 })).toBe(512.43);
+    expect(desdeBob(1044.87, "USD", tipos)).toBe(150.13);
   });
 
   it("sin tipo de cambio devuelve null", () => {
