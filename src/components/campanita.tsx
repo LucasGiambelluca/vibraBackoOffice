@@ -23,8 +23,12 @@ export function Campanita() {
   const [abierta, setAbierta] = useState(false);
 
   const cargar = useCallback(async () => {
-    const respuesta = await fetch("/api/notificaciones", { cache: "no-store" });
-    if (respuesta.ok) setDatos(await respuesta.json());
+    try {
+      const respuesta = await fetch("/api/notificaciones", { cache: "no-store" });
+      if (respuesta.ok) setDatos(await respuesta.json());
+    } catch {
+      // Sin red o respuesta inválida: la próxima consulta reintenta.
+    }
   }, []);
 
   useEffect(() => {
@@ -38,13 +42,22 @@ export function Campanita() {
 
   async function abrir(n: Notificacion) {
     setAbierta(false);
-    if (!n.leida) await marcarLeidaAction(formulario({ notificacionId: n.id }));
+    try {
+      if (!n.leida) await marcarLeidaAction(formulario({ notificacionId: n.id }));
+    } catch (error) {
+      // Que no marcarla como leída no impida abrir la tarea.
+      console.error("No se pudo marcar la notificación como leída", error);
+    }
     router.push(`/tareas/${n.tareaId}`);
     void cargar();
   }
 
   async function marcarTodas() {
-    await marcarTodasLeidasAction(formulario());
+    try {
+      await marcarTodasLeidasAction(formulario());
+    } catch (error) {
+      console.error("No se pudieron marcar las notificaciones como leídas", error);
+    }
     void cargar();
   }
 
