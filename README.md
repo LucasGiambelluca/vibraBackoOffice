@@ -47,3 +47,11 @@ Un worker revisa cada minuto los recordatorios vencidos, crea las notificaciones
 
 - **En desarrollo:** poné `WORKER_EN_APP=true` en `.env.local` y el worker corre dentro de `npm run dev` (PGlite no admite un segundo proceso). Sin `SMTP_HOST` los emails se imprimen en la consola.
 - **En el VPS:** `WORKER_EN_APP` vacío y `npm run worker` en su propio contenedor, con `DATABASE_URL` y las variables `SMTP_*`.
+
+## Deploy
+
+Producción en un VPS con Docker: ver [docs/deploy.md](docs/deploy.md).
+
+## Pruebas E2E
+
+`npm run e2e` (la primera vez: `npx playwright install chromium`). Levanta su propia app en el puerto 3100 con una base descartable en `.data/e2e`; puede correr con `npm run dev` abierto.
