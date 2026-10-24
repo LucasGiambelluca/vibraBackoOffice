@@ -71,3 +71,7 @@ export async function borrarUsuario(db: Db, actorId: string, userId: string): Pr
   const filas = await db.delete(user).where(eq(user.id, userId)).returning({ id: user.id });
   if (filas.length === 0) throw new ErrorUsuario("El usuario no existe");
 }
+
+export async function cambiarRecibirEmails(db: Db, userId: string, recibir: boolean): Promise<void> {
+  await db.update(user).set({ recibirEmails: recibir }).where(eq(user.id, userId));
+}
