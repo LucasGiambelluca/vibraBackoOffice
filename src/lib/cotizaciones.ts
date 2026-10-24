@@ -69,23 +69,31 @@ export async function editarCotizacion(
   if (adjunto !== undefined && actual.adjunto !== adjunto) await borrarPdf(actual.adjunto);
 }
 
-/** Aprueba y pasa a descartada el resto de las cotizaciones del rubro, en una transacción. */
+/**
+ * Aprueba y pasa a descartada el resto de las cotizaciones del rubro, en una transacción.
+ * Se bloquea la fila del rubro para que dos aprobaciones del mismo rubro se hagan de a una.
+ */
 export async function aprobarCotizacion(db: Db, id: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    const [fila] = await tx
-      .select({ rubroId: cotizacion.rubroId })
-      .from(cotizacion)
-      .where(eq(cotizacion.id, id))
-      .for("update");
-    if (!fila) throw new ErrorNegocio("La cotización no existe");
+  await conRestricciones(
+    () =>
+      db.transaction(async (tx) => {
+        const buscar = () => tx.select({ rubroId: cotizacion.rubroId }).from(cotizacion).where(eq(cotizacion.id, id));
+        const [previa] = await buscar();
+        if (!previa) throw new ErrorNegocio("La cotización no existe");
+        await tx.select({ id: rubro.id }).from(rubro).where(eq(rubro.id, previa.rubroId)).for("update");
+        // Pudo borrarse mientras se esperaba el bloqueo (el rubro no cambia: no es editable).
+        const [fila] = await buscar();
+        if (!fila) throw new ErrorNegocio("La cotización no existe");
 
-    // Primero se descartan las demás para no chocar con el índice de una aprobada por rubro.
-    await tx
-      .update(cotizacion)
-      .set({ estado: "descartada" })
-      .where(and(eq(cotizacion.rubroId, fila.rubroId), ne(cotizacion.id, id)));
-    await tx.update(cotizacion).set({ estado: "aprobada" }).where(eq(cotizacion.id, id));
-  });
+        // Primero se descartan las demás para no chocar con el índice de una aprobada por rubro.
+        await tx
+          .update(cotizacion)
+          .set({ estado: "descartada" })
+          .where(and(eq(cotizacion.rubroId, fila.rubroId), ne(cotizacion.id, id)));
+        await tx.update(cotizacion).set({ estado: "aprobada" }).where(eq(cotizacion.id, id));
+      }),
+    { unico: "Otra cotización del rubro se aprobó al mismo tiempo. Recargá la página." },
+  );
 }
 
 export async function revertirAprobacion(db: Db, id: string): Promise<void> {

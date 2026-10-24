@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/db/client";
 import { esViolacionUnica } from "@/db/errores";
 import { cotizacion } from "@/db/schema";
@@ -108,6 +108,22 @@ describe("con DB", () => {
       await aprobarCotizacion(db, b);
       expect(await estado(db, a)).toBe("descartada");
       expect(await estado(db, b)).toBe("aprobada");
+    });
+
+    it("dos aprobaciones a la vez en el mismo rubro terminan con una sola aprobada", async () => {
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      const b = await nuevaCotizacion(db, sonido, proveedor);
+      await Promise.all([aprobarCotizacion(db, a), aprobarCotizacion(db, b)]);
+      const estados = [await estado(db, a), await estado(db, b)].sort();
+      expect(estados).toEqual(["aprobada", "descartada"]);
+    });
+
+    it("si choca con otra aprobación simultánea da un error de negocio", async () => {
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      vi.spyOn(db, "transaction").mockRejectedValueOnce(Object.assign(new Error("duplicada"), { code: "23505" }));
+      await expect(aprobarCotizacion(db, a)).rejects.toThrow(
+        "Otra cotización del rubro se aprobó al mismo tiempo. Recargá la página.",
+      );
     });
 
     it("falla si la cotización no existe", async () => {
