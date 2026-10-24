@@ -8,10 +8,16 @@ import { cn } from "@/lib/utils";
 
 const LINKS = [
   { href: "/", label: "Tablero" },
+  { href: "/presupuestos", label: "Presupuestos" },
+  { href: "/proveedores", label: "Proveedores" },
   { href: "/cuenta", label: "Mi cuenta" },
 ];
 
-const LINKS_ADMIN = [{ href: "/configuracion/usuarios", label: "Usuarios" }];
+const LINKS_ADMIN = [
+  { href: "/configuracion/usuarios", label: "Usuarios" },
+  { href: "/configuracion/rubros", label: "Rubros" },
+  { href: "/configuracion/tipos-cambio", label: "Tipos de cambio" },
+];
 
 function activo(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
