@@ -25,9 +25,15 @@ function useAccion(accion: AccionFormulario, redirigir?: string) {
 
   function enviar(form: HTMLFormElement, alTerminar?: (resultado: Resultado) => void) {
     const datos = new FormData(form);
-    const pesado = [...datos.values()].some((v) => v instanceof File && v.size > MAX_ADJUNTO);
-    if (pesado) {
-      setEstado({ ok: false, error: "El adjunto supera los 10 MB" });
+    // Un input file vacío llega como File de tamaño 0: no es un adjunto.
+    const archivos = [...datos.values()].filter((v): v is File => v instanceof File && v.size > 0);
+    const error = archivos.some((v) => v.type !== "application/pdf")
+      ? "El adjunto debe ser un PDF"
+      : archivos.some((v) => v.size > MAX_ADJUNTO)
+        ? "El adjunto supera los 10 MB"
+        : null;
+    if (error) {
+      setEstado({ ok: false, error });
       return;
     }
     startTransition(async () => {

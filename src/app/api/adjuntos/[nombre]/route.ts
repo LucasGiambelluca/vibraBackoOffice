@@ -14,6 +14,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/adjuntos/[no
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="${nombre}"`,
       "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }
