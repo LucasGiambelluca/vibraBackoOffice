@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { esViolacionFk, esViolacionUnica } from "@/db/errores";
 
 /** Lo que devuelve toda server action: los casos esperados nunca lanzan. */
 export type Resultado = { ok: true } | { ok: false; error: string };
@@ -22,4 +23,18 @@ export function validar<T extends z.ZodType>(schema: T, datos: unknown): z.outpu
   const parsed = schema.safeParse(datos);
   if (!parsed.success) throw new ErrorNegocio(parsed.error.issues[0].message);
   return parsed.data;
+}
+
+/** Corre `fn` y traduce violaciones de UNIQUE / FK de Postgres a ErrorNegocio con estos mensajes. */
+export async function conRestricciones<T>(
+  fn: () => Promise<T>,
+  mensajes: { unico?: string; fk?: string },
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (mensajes.unico && esViolacionUnica(error)) throw new ErrorNegocio(mensajes.unico);
+    if (mensajes.fk && esViolacionFk(error)) throw new ErrorNegocio(mensajes.fk);
+    throw error;
+  }
 }

@@ -2,9 +2,12 @@ import { hashPassword } from "better-auth/crypto";
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
+import { esViolacionUnica } from "@/db/errores";
 import { account, user } from "@/db/schema";
 import { ErrorNegocio } from "@/lib/acciones";
 import { ROLES, type Rol } from "@/lib/permissions";
+
+export { esViolacionUnica };
 
 export const nuevoUsuarioSchema = z.object({
   nombre: z.string("Falta el nombre").trim().min(2, "El nombre es muy corto"),
@@ -20,14 +23,6 @@ export type NuevoUsuario = z.infer<typeof nuevoUsuarioSchema>;
 
 /** Error de regla de negocio: su mensaje se puede mostrar al usuario. */
 export class ErrorUsuario extends ErrorNegocio {}
-
-/** Violación de UNIQUE de Postgres; drizzle la envuelve en `cause` según el driver. */
-export function esViolacionUnica(error: unknown): boolean {
-  for (let e = error; e instanceof Object; e = (e as { cause?: unknown }).cause) {
-    if ((e as { code?: unknown }).code === "23505") return true;
-  }
-  return false;
-}
 
 export async function crearUsuario(db: Db, datos: NuevoUsuario): Promise<string> {
   const existente = await db.select({ id: user.id }).from(user).where(eq(user.email, datos.email)).limit(1);
