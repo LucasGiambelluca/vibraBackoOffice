@@ -36,3 +36,7 @@ npm run lint
 ## Importante: PGlite admite un solo proceso
 
 `.data/pglite` solo puede abrirlo un proceso a la vez. **No corras `db:migrate` ni `db:seed` con `npm run dev` encendido**: pará el servidor, corré el script y volvé a levantarlo.
+
+## Adjuntos
+
+Los PDF de las cotizaciones se guardan en `UPLOADS_DIR` (por defecto `.data/uploads`, fuera de git) y se descargan por `/api/adjuntos/<nombre>`, que exige sesión. En el VPS, `UPLOADS_DIR` tiene que ser un volumen persistente incluido en el backup.
