@@ -3,7 +3,7 @@ import type { Db } from "@/db/client";
 import { notificacion, recordatorio, tarea, user } from "@/db/schema";
 import type { EnviarEmail } from "@/lib/email";
 import { pendiente } from "@/lib/recordatorios";
-import { mensajeRecordatorio, siguienteNueve } from "@/lib/reminders";
+import { hoyEnLaPaz, mensajeRecordatorio, siguienteNueve } from "@/lib/reminders";
 
 // Lógica del worker (src/worker/ciclo.ts). Testeable con una DB de prueba.
 
@@ -12,8 +12,14 @@ const LOTE = 100;
 
 /**
  * Toma los recordatorios vencidos y, en la misma transacción, crea las notificaciones y
- * los marca enviados. `SKIP LOCKED`: dos workers a la vez nunca toman el mismo.
- * Devuelve cuántos recordatorios procesó.
+ * los marca enviados. Bloquea el recordatorio y su tarea con `SKIP LOCKED`: dos workers
+ * nunca toman el mismo, y si la tarea se está editando (o marcando hecha, o recibiendo
+ * un manual nuevo) el recordatorio queda para la próxima corrida y se lee su estado real.
+ *
+ * Se cancelan sin notificar: los de tareas hechas, los diarios de vencida de tareas que ya
+ * no están vencidas, y los automáticos "3 días antes" / "vence hoy" de un día anterior
+ * (el worker estuvo caído); un "vence hoy" atrasado igual arranca la cadena de vencida.
+ * Los manuales atrasados sí se avisan. Devuelve cuántos recordatorios notificó.
  */
 export async function procesarRecordatorios(db: Db, ahora = new Date()): Promise<number> {
   return db.transaction(async (tx) => {
@@ -21,6 +27,7 @@ export async function procesarRecordatorios(db: Db, ahora = new Date()): Promise
       .select({
         id: recordatorio.id,
         tareaId: recordatorio.tareaId,
+        fechaHora: recordatorio.fechaHora,
         tipoAutomatico: recordatorio.tipoAutomatico,
         titulo: tarea.titulo,
         fechaLimite: tarea.fechaLimite,
@@ -32,31 +39,50 @@ export async function procesarRecordatorios(db: Db, ahora = new Date()): Promise
       .where(and(lte(recordatorio.fechaHora, ahora), pendiente))
       .orderBy(asc(recordatorio.fechaHora))
       .limit(LOTE)
-      .for("update", { of: recordatorio, skipLocked: true });
+      .for("update", { of: [recordatorio, tarea], skipLocked: true });
     if (vencidos.length === 0) return 0;
 
     const usuarios = await tx.select({ id: user.id, role: user.role, recibirEmails: user.recibirEmails }).from(user);
     const recibeEmails = new Map(usuarios.map((u) => [u.id, u.recibirEmails]));
     const admins = usuarios.filter((u) => u.role === "admin").map((u) => u.id);
+    const hoy = hoyEnLaPaz(ahora);
+    let notificados = 0;
 
     for (const r of vencidos) {
-      // Sin responsable (o si lo borraron), les llega a todos los admins.
-      const destinatarios = r.responsableId ? [r.responsableId] : admins;
-      const mensaje = mensajeRecordatorio(r.tipoAutomatico ?? "manual", r.titulo, r.fechaLimite);
-      if (destinatarios.length > 0) {
-        await tx.insert(notificacion).values(
-          destinatarios.map((usuarioId) => ({
-            usuarioId,
-            tareaId: r.tareaId,
-            mensaje,
-            emailEstado: recibeEmails.get(usuarioId) ? ("pendiente" as const) : ("omitido" as const),
-          })),
-        );
+      const cancelar = () => tx.update(recordatorio).set({ canceladoAt: ahora }).where(eq(recordatorio.id, r.id));
+      if (r.estado === "hecha") {
+        await cancelar();
+        continue;
       }
-      await tx.update(recordatorio).set({ enviadoAt: ahora }).where(eq(recordatorio.id, r.id));
+      if (r.tipoAutomatico === "vencida_diario" && (!r.fechaLimite || r.fechaLimite >= hoy)) {
+        await cancelar();
+        continue;
+      }
 
-      const vencida = r.tipoAutomatico === "dia_vencimiento" || r.tipoAutomatico === "vencida_diario";
-      if (vencida && r.estado !== "hecha") {
+      const atrasado =
+        (r.tipoAutomatico === "3_dias_antes" || r.tipoAutomatico === "dia_vencimiento") &&
+        hoyEnLaPaz(r.fechaHora) < hoy;
+      if (atrasado) {
+        await cancelar();
+      } else {
+        // Sin responsable (o si lo borraron), les llega a todos los admins.
+        const destinatarios = r.responsableId ? [r.responsableId] : admins;
+        const mensaje = mensajeRecordatorio(r.tipoAutomatico ?? "manual", r.titulo, r.fechaLimite);
+        if (destinatarios.length > 0) {
+          await tx.insert(notificacion).values(
+            destinatarios.map((usuarioId) => ({
+              usuarioId,
+              tareaId: r.tareaId,
+              mensaje,
+              emailEstado: recibeEmails.get(usuarioId) ? ("pendiente" as const) : ("omitido" as const),
+            })),
+          );
+        }
+        await tx.update(recordatorio).set({ enviadoAt: ahora }).where(eq(recordatorio.id, r.id));
+        notificados++;
+      }
+
+      if (r.tipoAutomatico === "dia_vencimiento" || r.tipoAutomatico === "vencida_diario") {
         await tx.insert(recordatorio).values({
           tareaId: r.tareaId,
           origen: "automatico",
@@ -65,7 +91,7 @@ export async function procesarRecordatorios(db: Db, ahora = new Date()): Promise
         });
       }
     }
-    return vencidos.length;
+    return notificados;
   });
 }
 

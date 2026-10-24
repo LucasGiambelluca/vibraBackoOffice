@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/db/client";
-import { notificacion, user } from "@/db/schema";
+import { notificacion, recordatorio, tarea, user } from "@/db/schema";
 import type { Email } from "@/lib/email";
 import {
   enviarEmailsPendientes,
@@ -85,6 +85,69 @@ describe("procesarRecordatorios", () => {
     await procesarRecordatorios(db, DIA_3_NUEVE);
     const filas = await db.select().from(notificacion).where(eq(notificacion.tareaId, id));
     expect(filas.map((n) => n.usuarioId)).toEqual([admin.id]);
+  });
+});
+
+describe("procesarRecordatorios: estado de la tarea", () => {
+  it("si la tarea ya está hecha cancela el recordatorio sin notificar", async () => {
+    const id = await nuevaTarea(db, { fechaLimite: "2027-03-10", responsableId: editor.id });
+    await cambiarEstadoTarea(db, id, "hecha", AHORA);
+    // Un manual creado en carrera con "Hecha" queda pendiente.
+    await db.insert(recordatorio).values({ tareaId: id, origen: "manual", fechaHora: new Date("2027-03-05T13:00:00Z") });
+
+    expect(await procesarRecordatorios(db, DIA_10_NUEVE)).toBe(0);
+    expect(await notificaciones(db)).toEqual([]);
+    expect((await recordatoriosDe(db, id)).find((r) => r.tipo === "manual")?.estado).toBe("cancelado");
+  });
+
+  it("si la tarea ya no está vencida, corta la cadena del diario de vencida", async () => {
+    const id = await nuevaTarea(db, { fechaLimite: "2027-03-10", responsableId: editor.id });
+    await procesarRecordatorios(db, DIA_10_NUEVE);
+    await db.delete(notificacion);
+    // La fecha se movió sin regenerar los automáticos (p. ej. en carrera con el worker).
+    await db.update(tarea).set({ fechaLimite: "2027-03-20" }).where(eq(tarea.id, id));
+
+    expect(await procesarRecordatorios(db, new Date("2027-03-11T13:00:30Z"))).toBe(0);
+    expect(await notificaciones(db)).toEqual([]);
+    const recordatorios = await recordatoriosDe(db, id);
+    expect(recordatorios.at(-1)).toEqual({ tipo: "vencida_diario", fechaHora: "2027-03-11T13:00:00.000Z", estado: "cancelado" });
+  });
+
+  it("si la tarea quedó sin fecha límite, corta la cadena del diario de vencida", async () => {
+    const id = await nuevaTarea(db, { fechaLimite: "2027-03-10", responsableId: editor.id });
+    await procesarRecordatorios(db, DIA_10_NUEVE);
+    await db.update(tarea).set({ fechaLimite: null }).where(eq(tarea.id, id));
+
+    expect(await procesarRecordatorios(db, new Date("2027-03-11T13:00:30Z"))).toBe(0);
+    expect((await recordatoriosDe(db, id)).at(-1)?.estado).toBe("cancelado");
+  });
+});
+
+describe("procesarRecordatorios: worker caído", () => {
+  it("descarta los automáticos de días anteriores pero arranca la cadena de vencida", async () => {
+    const id = await nuevaTarea(db, { fechaLimite: "2027-03-10", responsableId: editor.id });
+    // El worker vuelve el 12/3 a las 10:00 de La Paz.
+    expect(await procesarRecordatorios(db, new Date("2027-03-12T14:00:00Z"))).toBe(0);
+
+    expect(await notificaciones(db)).toEqual([]);
+    expect(await recordatoriosDe(db, id)).toEqual([
+      { tipo: "3_dias_antes", fechaHora: "2027-03-07T13:00:00.000Z", estado: "cancelado" },
+      { tipo: "dia_vencimiento", fechaHora: "2027-03-10T13:00:00.000Z", estado: "cancelado" },
+      { tipo: "vencida_diario", fechaHora: "2027-03-13T13:00:00.000Z", estado: "pendiente" },
+    ]);
+  });
+
+  it("si vuelve el mismo día del vencimiento, avisa solo el del día", async () => {
+    await nuevaTarea(db, { titulo: "Vallas", fechaLimite: "2027-03-10", responsableId: editor.id });
+    expect(await procesarRecordatorios(db, new Date("2027-03-10T20:00:00Z"))).toBe(1);
+    expect((await notificaciones(db)).map((n) => n.mensaje)).toEqual(['"Vallas" vence hoy']);
+  });
+
+  it("los manuales atrasados se avisan igual", async () => {
+    const id = await nuevaTarea(db, { titulo: "Vallas", responsableId: editor.id });
+    await db.insert(recordatorio).values({ tareaId: id, origen: "manual", fechaHora: new Date("2027-03-05T13:00:00Z") });
+    expect(await procesarRecordatorios(db, new Date("2027-03-08T13:00:00Z"))).toBe(1);
+    expect((await notificaciones(db)).map((n) => n.mensaje)).toEqual(['Recordatorio: "Vallas"']);
   });
 });
 
