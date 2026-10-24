@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { Campanita } from "@/components/campanita";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
@@ -10,6 +11,7 @@ const LINKS = [
   { href: "/", label: "Tablero" },
   { href: "/presupuestos", label: "Presupuestos" },
   { href: "/proveedores", label: "Proveedores" },
+  { href: "/tareas", label: "Tareas" },
   { href: "/cuenta", label: "Mi cuenta" },
 ];
 
@@ -36,7 +38,10 @@ export function Nav({ nombre, esAdmin }: { nombre: string; esAdmin: boolean }) {
 
   return (
     <aside className="border-b bg-muted/40 p-4 md:w-56 md:shrink-0 md:border-b-0 md:border-r">
-      <p className="mb-4 font-semibold">Vibra 2027</p>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <p className="font-semibold">Vibra 2027</p>
+        <Campanita />
+      </div>
       <nav className="flex flex-wrap gap-1 md:flex-col">
         {links.map((link) => (
           <Link
