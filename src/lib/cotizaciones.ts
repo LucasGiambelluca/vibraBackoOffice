@@ -11,6 +11,8 @@ import { decimal } from "@/lib/validacion";
 export const ESTADOS = ["pendiente", "aprobada", "descartada"] as const;
 export type Estado = (typeof ESTADOS)[number];
 
+const DESCUENTO_FUERA_DE_RANGO = "El descuento debe estar entre 0 y 100";
+
 /** Campos editables. El rubro se elige al crear y no cambia. */
 export const cotizacionSchema = z.object({
   proveedorId: z.string("Elegí un proveedor").min(1, "Elegí un proveedor"),
@@ -20,13 +22,20 @@ export const cotizacionSchema = z.object({
     .min(2, "La descripción es muy corta")
     .max(2000, "La descripción es muy larga"),
   moneda: z.enum(MONEDAS, "Moneda inválida"),
-  precioDia: decimal("Precio inválido: usá solo números, ej. 1500.50", 2).refine(
+  precioDia: decimal("Precio inválido: usá solo números, ej. 1500.50", {
+    enteros: 12,
+    decimales: 2,
+    demasiadoGrande: "El precio es demasiado grande",
+  }).refine(
     (valor) => Number(valor) > 0,
     "El precio debe ser mayor a 0",
   ),
   descuento2Dias: z
-    .preprocess((valor) => (valor === undefined || valor === "" ? "0" : valor), decimal("Descuento inválido", 2))
-    .refine((valor) => Number(valor) <= 100, "El descuento debe estar entre 0 y 100"),
+    .preprocess(
+      (valor) => (valor === undefined || valor === "" ? "0" : valor),
+      decimal("Descuento inválido", { enteros: 3, decimales: 2, demasiadoGrande: DESCUENTO_FUERA_DE_RANGO }),
+    )
+    .refine((valor) => Number(valor) <= 100, DESCUENTO_FUERA_DE_RANGO),
 });
 
 export const nuevaCotizacionSchema = cotizacionSchema.extend({

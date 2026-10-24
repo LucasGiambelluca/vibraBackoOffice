@@ -17,12 +17,23 @@ describe("tipoCambioSchema", () => {
       "El valor debe ser mayor a 0",
     );
   });
+
+  it("rechaza valores que no entran en la columna (8 dígitos enteros)", () => {
+    expect(tipoCambioSchema.safeParse({ moneda: "USD", valorBob: "123456789" }).error?.issues[0].message).toBe(
+      "El valor es demasiado grande",
+    );
+  });
 });
 
 describe("con DB", () => {
   let db: Db;
   beforeEach(async () => {
     db = await crearDbPrueba();
+  });
+
+  it("guarda el valor más grande permitido", async () => {
+    await guardarTipoCambio(db, tipoCambioSchema.parse({ moneda: "USD", valorBob: "99999999.999999" }), null);
+    expect(await obtenerTiposCambio(db)).toEqual({ USD: 99999999.999999 });
   });
 
   it("sin datos no hay tipos de cambio", async () => {

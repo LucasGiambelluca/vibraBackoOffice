@@ -7,7 +7,11 @@ import { decimal } from "@/lib/validacion";
 
 export const tipoCambioSchema = z.object({
   moneda: z.enum(MONEDAS_EXTRANJERAS, "Moneda inválida"),
-  valorBob: decimal("Valor inválido: usá solo números, ej. 6.96", 6).refine(
+  valorBob: decimal("Valor inválido: usá solo números, ej. 6.96", {
+    enteros: 8,
+    decimales: 6,
+    demasiadoGrande: "El valor es demasiado grande",
+  }).refine(
     (valor) => Number(valor) > 0,
     "El valor debe ser mayor a 0",
   ),

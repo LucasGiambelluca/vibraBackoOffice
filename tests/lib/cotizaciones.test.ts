@@ -43,6 +43,11 @@ describe("cotizacionSchema", () => {
     expect(error({ moneda: "EUR" })).toBe("Moneda inválida");
     expect(error({ proveedorId: "" })).toBe("Elegí un proveedor");
   });
+
+  it("rechaza precios que no entran en la columna (12 dígitos enteros)", () => {
+    expect(error({ precioDia: "1000000000000" })).toBe("El precio es demasiado grande");
+    expect(error({ descuento2Dias: "1000" })).toBe("El descuento debe estar entre 0 y 100");
+  });
 });
 
 describe("con DB", () => {
@@ -73,6 +78,11 @@ describe("con DB", () => {
         ahorro: 200,
         totalBob: 1800,
       });
+    });
+
+    it("guarda el precio más grande permitido", async () => {
+      await nuevaCotizacion(db, sonido, proveedor, { precioDia: "999999999999.99", descuento2Dias: "0" });
+      expect((await listarCotizaciones(db))[0]).toMatchObject({ precioDia: 999999999999.99, total: 1999999999999.98 });
     });
 
     it("totalBob es null si falta el tipo de cambio", async () => {
