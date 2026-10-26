@@ -8,7 +8,8 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { describe, expect, it } from "vitest";
 
 // La 0007 pasa lo cargado con el esquema de un solo evento a "Vibra Bolivia 2027".
-// Se arma una base en la 0006, se cargan datos con SQL crudo y se aplica la 0007.
+// Se arma una base en la 0006, se cargan datos con SQL crudo y se aplica la 0007 (sola: la 0008
+// saca cotizacion.adjunto, que esta prueba revisa).
 
 /** Carpeta de migraciones recortada hasta `hasta` (inclusive). */
 function migracionesHasta(hasta: number): string {
@@ -54,7 +55,7 @@ describe("migración 0007 (multi-evento)", () => {
   it("pasa lo cargado a Vibra Bolivia 2027 sin perder nada", async () => {
     const db = await baseEn0006();
     await cargarDatos(db, { usd: "6.96", ars: "0.0052" });
-    await migrate(db, { migrationsFolder: "drizzle" });
+    await migrate(db, { migrationsFolder: migracionesHasta(7) });
 
     const eventos = await filas<{ id: string; nombre: string; estado: string }>(db, sql`select id, nombre, estado from evento`);
     expect(eventos).toEqual([{ id: expect.any(String), nombre: "Vibra Bolivia 2027", estado: "activo" }]);
@@ -114,7 +115,7 @@ describe("migración 0007 (multi-evento)", () => {
   it("sin tipo de cambio del ARS no carga tipos (se piden en el evento)", async () => {
     const db = await baseEn0006();
     await cargarDatos(db, { usd: "6.96" });
-    await migrate(db, { migrationsFolder: "drizzle" });
+    await migrate(db, { migrationsFolder: migracionesHasta(7) });
     expect(await filas(db, sql`select * from evento_tipo_cambio`)).toEqual([]);
   });
 });

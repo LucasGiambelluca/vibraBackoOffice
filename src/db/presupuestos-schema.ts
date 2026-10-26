@@ -48,8 +48,6 @@ export const cotizacion = pgTable(
     moneda: text("moneda").notNull(),
     precioDia: numeric("precio_dia", { precision: 14, scale: 2 }).notNull(),
     descuento2Dias: numeric("descuento_2_dias", { precision: 5, scale: 2 }).notNull().default("0"),
-    /** Nombre del PDF en UPLOADS_DIR (ver src/lib/adjuntos.ts). */
-    adjunto: text("adjunto"),
     estado: text("estado").notNull().default("pendiente"),
     /** Quién y cuándo la aprobó. Solo tienen valor mientras está aprobada. */
     aprobadaPor: text("aprobada_por").references(() => user.id, { onDelete: "set null" }),

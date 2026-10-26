@@ -1,3 +1,4 @@
+export * from "./archivos-schema";
 export * from "./auth-schema";
 export * from "./eventos-schema";
 export * from "./presupuestos-schema";
