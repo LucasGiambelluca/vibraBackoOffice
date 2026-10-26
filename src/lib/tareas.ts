@@ -1,18 +1,20 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import { area, tarea, user } from "@/db/schema";
+import { evento, grupo, tarea, user } from "@/db/schema";
 import { conRestricciones, ErrorNegocio } from "@/lib/acciones";
-import { cancelarPendientes, regenerarAutomaticos } from "@/lib/recordatorios";
+import { asegurarEventoAbierto } from "@/lib/eventos";
+import { cancelarPendientes, regenerarAutomaticos, type Tx } from "@/lib/recordatorios";
 import { hoyEnLaPaz, sumarDias } from "@/lib/reminders";
 import { fechaOpcional, textoOpcional } from "@/lib/validacion";
 
 export const ESTADOS_TAREA = ["pendiente", "en_curso", "hecha"] as const;
 export type EstadoTarea = (typeof ESTADOS_TAREA)[number];
 
+/** Campos editables. El evento se elige al crear y no cambia. */
 export const tareaSchema = z.object({
   titulo: z.string("Falta el título").trim().min(2, "El título es muy corto").max(200, "El título es muy largo"),
-  areaId: z.coerce.number("Área inválida").int("Área inválida").positive("Área inválida"),
+  grupoId: z.coerce.number("Grupo inválido").int("Grupo inválido").positive("Grupo inválido"),
   responsableId: z
     .string()
     .optional()
@@ -21,19 +23,37 @@ export const tareaSchema = z.object({
   notas: textoOpcional(2000),
 });
 
-export type DatosTarea = z.infer<typeof tareaSchema>;
+export const nuevaTareaSchema = tareaSchema.extend({
+  eventoId: z.string("Evento inválido").min(1, "Evento inválido"),
+});
 
-const MENSAJES = { fk: "Área o responsable inválido" };
+export type DatosTarea = z.infer<typeof tareaSchema>;
+export type NuevaTarea = z.infer<typeof nuevaTareaSchema>;
+
+const MENSAJES = { fk: "Grupo o responsable inválido" };
+
+/** Bloquea la tarea; falla si no existe o su evento está cerrado. */
+async function tareaAbierta(tx: Tx, id: string) {
+  const [actual] = await tx
+    .select({ fechaLimite: tarea.fechaLimite, estado: tarea.estado, eventoId: tarea.eventoId })
+    .from(tarea)
+    .where(eq(tarea.id, id))
+    .for("update");
+  if (!actual) throw new ErrorNegocio("La tarea no existe");
+  await asegurarEventoAbierto(tx, actual.eventoId);
+  return actual;
+}
 
 export async function crearTarea(
   db: Db,
-  datos: DatosTarea,
+  datos: NuevaTarea,
   creadoPor: string | null,
   ahora = new Date(),
 ): Promise<string> {
   return conRestricciones(
     () =>
       db.transaction(async (tx) => {
+        await asegurarEventoAbierto(tx, datos.eventoId);
         const [fila] = await tx.insert(tarea).values({ ...datos, creadoPor }).returning({ id: tarea.id });
         await regenerarAutomaticos(tx, fila.id, datos.fechaLimite, false, ahora);
         return fila.id;
@@ -46,13 +66,7 @@ export async function editarTarea(db: Db, id: string, datos: DatosTarea, ahora =
   await conRestricciones(
     () =>
       db.transaction(async (tx) => {
-        const [actual] = await tx
-          .select({ fechaLimite: tarea.fechaLimite, estado: tarea.estado })
-          .from(tarea)
-          .where(eq(tarea.id, id))
-          .for("update");
-        if (!actual) throw new ErrorNegocio("La tarea no existe");
-
+        const actual = await tareaAbierta(tx, id);
         await tx.update(tarea).set(datos).where(eq(tarea.id, id));
         if (actual.fechaLimite !== datos.fechaLimite) {
           await regenerarAutomaticos(tx, id, datos.fechaLimite, actual.estado === "hecha", ahora);
@@ -65,12 +79,7 @@ export async function editarTarea(db: Db, id: string, datos: DatosTarea, ahora =
 /** Hecha cancela todos los recordatorios pendientes; reabrir regenera los automáticos. */
 export async function cambiarEstadoTarea(db: Db, id: string, estado: EstadoTarea, ahora = new Date()) {
   await db.transaction(async (tx) => {
-    const [actual] = await tx
-      .select({ fechaLimite: tarea.fechaLimite, estado: tarea.estado })
-      .from(tarea)
-      .where(eq(tarea.id, id))
-      .for("update");
-    if (!actual) throw new ErrorNegocio("La tarea no existe");
+    const actual = await tareaAbierta(tx, id);
     if (actual.estado === estado) return;
 
     await tx.update(tarea).set({ estado }).where(eq(tarea.id, id));
@@ -81,8 +90,10 @@ export async function cambiarEstadoTarea(db: Db, id: string, estado: EstadoTarea
 
 /** Sus recordatorios y notificaciones se borran en cascada. */
 export async function borrarTarea(db: Db, id: string): Promise<void> {
-  const filas = await db.delete(tarea).where(eq(tarea.id, id)).returning({ id: tarea.id });
-  if (filas.length === 0) throw new ErrorNegocio("La tarea no existe");
+  await db.transaction(async (tx) => {
+    await tareaAbierta(tx, id);
+    await tx.delete(tarea).where(eq(tarea.id, id));
+  });
 }
 
 function consultaTareas(db: Db) {
@@ -90,8 +101,10 @@ function consultaTareas(db: Db) {
     .select({
       id: tarea.id,
       titulo: tarea.titulo,
-      areaId: tarea.areaId,
-      area: area.nombre,
+      eventoId: tarea.eventoId,
+      evento: evento.nombre,
+      grupoId: tarea.grupoId,
+      grupo: grupo.nombre,
       responsableId: tarea.responsableId,
       responsable: user.name,
       fechaLimite: tarea.fechaLimite,
@@ -100,18 +113,28 @@ function consultaTareas(db: Db) {
       creadoPor: tarea.creadoPor,
     })
     .from(tarea)
-    .innerJoin(area, eq(tarea.areaId, area.id))
+    .innerJoin(evento, eq(tarea.eventoId, evento.id))
+    .innerJoin(grupo, eq(tarea.grupoId, grupo.id))
     .leftJoin(user, eq(tarea.responsableId, user.id));
 }
 
-export type FiltroTareas = { areaId?: number; responsableId?: string; estado?: EstadoTarea };
+export type FiltroTareas = {
+  eventoId?: string;
+  /** Varios eventos a la vez (el tablero muestra los activos). */
+  eventoIds?: string[];
+  grupoId?: number;
+  responsableId?: string;
+  estado?: EstadoTarea;
+};
 
 /** Ordenadas por fecha límite (las sin fecha al final). */
 export function listarTareas(db: Db, filtro: FiltroTareas = {}) {
   return consultaTareas(db)
     .where(
       and(
-        filtro.areaId ? eq(tarea.areaId, filtro.areaId) : undefined,
+        filtro.eventoId ? eq(tarea.eventoId, filtro.eventoId) : undefined,
+        filtro.eventoIds ? inArray(tarea.eventoId, filtro.eventoIds) : undefined,
+        filtro.grupoId ? eq(tarea.grupoId, filtro.grupoId) : undefined,
         filtro.responsableId ? eq(tarea.responsableId, filtro.responsableId) : undefined,
         filtro.estado ? eq(tarea.estado, filtro.estado) : undefined,
       ),
@@ -126,22 +149,16 @@ export async function obtenerTarea(db: Db, id: string) {
   return fila;
 }
 
-/** Para el tablero: avance por área, vencidas y las que vencen en los próximos 7 días. */
-export async function resumenTareas(db: Db, ahora = new Date()) {
-  const tareas = await listarTareas(db);
+/** Para el tablero: las vencidas y las que vencen en los próximos 7 días de esos eventos. */
+export async function resumenTareas(db: Db, eventoIds: string[], ahora = new Date()) {
+  if (eventoIds.length === 0) return { vencidas: [], proximas: [] };
+  const tareas = await listarTareas(db, { eventoIds });
   const hoy = hoyEnLaPaz(ahora);
   const enUnaSemana = sumarDias(hoy, 7);
-
-  const porArea = new Map<number, { hechas: number; total: number }>();
-  for (const t of tareas) {
-    const actual = porArea.get(t.areaId) ?? { hechas: 0, total: 0 };
-    porArea.set(t.areaId, { hechas: actual.hechas + (t.estado === "hecha" ? 1 : 0), total: actual.total + 1 });
-  }
 
   // Las fechas "YYYY-MM-DD" se comparan bien como texto.
   const abiertas = tareas.filter((t): t is TareaListada & { fechaLimite: string } => t.estado !== "hecha" && !!t.fechaLimite);
   return {
-    porArea,
     vencidas: abiertas.filter((t) => t.fechaLimite < hoy),
     proximas: abiertas.filter((t) => t.fechaLimite >= hoy && t.fechaLimite <= enUnaSemana),
   };

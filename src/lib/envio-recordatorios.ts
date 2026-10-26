@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { notificacion, recordatorio, tarea, user } from "@/db/schema";
+import { evento, notificacion, recordatorio, tarea, user } from "@/db/schema";
 import type { EnviarEmail } from "@/lib/email";
 import { pendiente, type Tx } from "@/lib/recordatorios";
 import { hoyEnLaPaz, mensajeRecordatorio, siguienteNueve } from "@/lib/reminders";
@@ -98,7 +98,14 @@ export async function procesarRecordatorios(db: Db, ahora = new Date()): Promise
 /** Un email reclamado no lo vuelve a tomar ningún worker durante este tiempo. */
 export const VENTANA_RECLAMO_MS = 10 * 60_000;
 
-export type EmailReclamado = { id: string; tareaId: string; mensaje: string; intentos: number; email: string };
+export type EmailReclamado = {
+  id: string;
+  tareaId: string;
+  mensaje: string;
+  intentos: number;
+  email: string;
+  evento: string;
+};
 
 /**
  * Reclama un lote de emails pendientes en una transacción corta: les suma el intento y
@@ -115,9 +122,12 @@ export async function reclamarEmails(db: Db, ahora = new Date()): Promise<EmailR
         mensaje: notificacion.mensaje,
         intentos: notificacion.intentosEmail,
         email: user.email,
+        evento: evento.nombre,
       })
       .from(notificacion)
       .innerJoin(user, eq(notificacion.usuarioId, user.id))
+      .innerJoin(tarea, eq(notificacion.tareaId, tarea.id))
+      .innerJoin(evento, eq(tarea.eventoId, evento.id))
       .where(
         and(
           eq(notificacion.emailEstado, "pendiente"),
@@ -174,7 +184,7 @@ export async function enviarEmailsPendientes(
     try {
       await enviar({
         para: n.email,
-        asunto: `Vibra 2027 — ${n.mensaje}`,
+        asunto: `${n.evento} — ${n.mensaje}`,
         texto: `${n.mensaje}
 
 Ver la tarea: ${urlBase}/tareas/${n.tareaId}`,

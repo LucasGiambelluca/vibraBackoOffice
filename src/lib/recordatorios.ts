@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Db } from "@/db/client";
 import { recordatorio, tarea } from "@/db/schema";
 import { ErrorNegocio } from "@/lib/acciones";
+import { asegurarEventoAbierto } from "@/lib/eventos";
 import { can, ErrorPermiso, type Actor } from "@/lib/permissions";
 import { desdeHoraLaPaz, recordatoriosAutomaticos } from "@/lib/reminders";
 
@@ -70,11 +71,12 @@ export async function crearRecordatorioManual(
 ): Promise<void> {
   if (datos.fechaHora <= ahora) throw new ErrorNegocio("La fecha tiene que ser futura");
   const [t] = await db
-    .select({ creadoPor: tarea.creadoPor, estado: tarea.estado })
+    .select({ creadoPor: tarea.creadoPor, estado: tarea.estado, eventoId: tarea.eventoId })
     .from(tarea)
     .where(eq(tarea.id, datos.tareaId));
   if (!t) throw new ErrorNegocio("La tarea no existe");
   if (!puedeGestionarRecordatorios(actor, t.creadoPor)) throw new ErrorPermiso();
+  await asegurarEventoAbierto(db, t.eventoId);
   if (t.estado === "hecha") throw new ErrorNegocio("La tarea ya está hecha");
 
   await db.insert(recordatorio).values({ ...datos, origen: "manual", creadoPor: actor.id });
@@ -82,13 +84,14 @@ export async function crearRecordatorioManual(
 
 export async function cancelarRecordatorio(db: Db, actor: Actor, id: string, ahora = new Date()): Promise<void> {
   const [r] = await db
-    .select({ origen: recordatorio.origen, creadorTarea: tarea.creadoPor })
+    .select({ origen: recordatorio.origen, creadorTarea: tarea.creadoPor, eventoId: tarea.eventoId })
     .from(recordatorio)
     .innerJoin(tarea, eq(recordatorio.tareaId, tarea.id))
     .where(and(eq(recordatorio.id, id), pendiente));
   if (!r) throw new ErrorNegocio("El recordatorio no existe o ya no está pendiente");
   if (r.origen !== "manual") throw new ErrorNegocio("Los recordatorios automáticos no se cancelan a mano");
   if (!puedeGestionarRecordatorios(actor, r.creadorTarea)) throw new ErrorPermiso();
+  await asegurarEventoAbierto(db, r.eventoId);
 
   await db.update(recordatorio).set({ canceladoAt: ahora }).where(eq(recordatorio.id, id));
 }

@@ -165,7 +165,7 @@ describe("enviarEmailsPendientes", () => {
     const enviados: Email[] = [];
     await enviarEmailsPendientes(db, async (email) => void enviados.push(email), "https://vibra.test");
     expect(enviados).toHaveLength(1);
-    expect(enviados[0]).toMatchObject({ para: "editor@vibra.bo", asunto: 'Vibra 2027 — "Vallas" vence hoy' });
+    expect(enviados[0]).toMatchObject({ para: "editor@vibra.bo", asunto: 'Vibra Bolivia 2027 — "Vallas" vence hoy' });
     expect(enviados[0].texto).toMatch(/https:\/\/vibra\.test\/tareas\/[0-9a-f-]{36}/);
     expect((await notificaciones(db))[0]).toMatchObject({ emailEstado: "enviado", intentosEmail: 1 });
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "@/db/client";
+import { cerrarEvento, crearEvento, eventoSchema } from "@/lib/eventos";
 import {
   borrarTarea,
   cambiarEstadoTarea,
@@ -11,13 +12,14 @@ import {
 } from "@/lib/tareas";
 import { crearActores } from "../helpers/actores";
 import { crearDbPrueba } from "../helpers/db";
+import { idVibra } from "../helpers/presupuestos";
 import { AHORA, nuevaTarea, recordatoriosDe, TAREA } from "../helpers/tareas";
 
 describe("tareaSchema", () => {
   it("campos opcionales vacíos quedan en null", () => {
     expect(tareaSchema.parse(TAREA)).toEqual({
       titulo: "Contratar vallas",
-      areaId: 4,
+      grupoId: 4,
       responsableId: null,
       fechaLimite: null,
       notas: null,
@@ -43,7 +45,11 @@ describe("con DB", () => {
 
   it("crear sin fecha límite no crea recordatorios", async () => {
     const id = await nuevaTarea(db);
-    expect(await obtenerTarea(db, id)).toMatchObject({ titulo: "Contratar vallas", area: "Infraestructura y Predio" });
+    expect(await obtenerTarea(db, id)).toMatchObject({
+      titulo: "Contratar vallas",
+      grupo: "Infraestructura y Predio",
+      evento: "Vibra Bolivia 2027",
+    });
     expect(await recordatoriosDe(db, id)).toEqual([]);
   });
 
@@ -87,8 +93,9 @@ describe("con DB", () => {
   });
 
   it("responsable o área inexistente vuelve como ErrorNegocio", async () => {
-    await expect(nuevaTarea(db, { responsableId: "no-existe" })).rejects.toThrow("Área o responsable inválido");
-    await expect(nuevaTarea(db, { areaId: "99" })).rejects.toThrow("Área o responsable inválido");
+    await expect(nuevaTarea(db, { responsableId: "no-existe" })).rejects.toThrow("Grupo o responsable inválido");
+    await expect(nuevaTarea(db, { grupoId: "99" })).rejects.toThrow("Grupo o responsable inválido");
+    await expect(nuevaTarea(db, { eventoId: "nada" })).rejects.toThrow("El evento no existe");
   });
 
   it("editar, cambiar estado o borrar una tarea inexistente vuelve como ErrorNegocio", async () => {
@@ -103,25 +110,36 @@ describe("con DB", () => {
     expect(await obtenerTarea(db, id)).toBeUndefined();
   });
 
+  it("con el evento cerrado no se crea, edita, cambia de estado ni borra", async () => {
+    const id = await nuevaTarea(db);
+    await cerrarEvento(db, await idVibra(db), null);
+    const cerrado = "El evento está cerrado: solo lectura";
+    await expect(nuevaTarea(db)).rejects.toThrow(cerrado);
+    await expect(editarTarea(db, id, tareaSchema.parse(TAREA))).rejects.toThrow(cerrado);
+    await expect(cambiarEstadoTarea(db, id, "hecha")).rejects.toThrow(cerrado);
+    await expect(borrarTarea(db, id)).rejects.toThrow(cerrado);
+  });
+
   describe("listarTareas", () => {
     it("ordena por fecha límite (sin fecha al final) y filtra", async () => {
       const { editor } = await crearActores(db);
       await nuevaTarea(db, { titulo: "Sin fecha" });
       await nuevaTarea(db, { titulo: "Tarde", fechaLimite: "2027-04-01", responsableId: editor.id });
-      await nuevaTarea(db, { titulo: "Temprano", fechaLimite: "2027-03-05", areaId: "1" });
+      await nuevaTarea(db, { titulo: "Temprano", fechaLimite: "2027-03-05", grupoId: "1" });
 
       expect((await listarTareas(db)).map((t) => t.titulo)).toEqual(["Temprano", "Tarde", "Sin fecha"]);
-      expect((await listarTareas(db, { areaId: 1 })).map((t) => t.titulo)).toEqual(["Temprano"]);
+      expect((await listarTareas(db, { grupoId: 1 })).map((t) => t.titulo)).toEqual(["Temprano"]);
       expect((await listarTareas(db, { responsableId: editor.id }))[0]).toMatchObject({
         titulo: "Tarde",
         responsable: "editor@vibra.bo",
       });
       expect(await listarTareas(db, { estado: "hecha" })).toHaveLength(0);
+      expect(await listarTareas(db, { eventoId: "otro" })).toHaveLength(0);
     });
   });
 
   describe("resumenTareas", () => {
-    it("hechas por área, vencidas y próximas 7 días (sin contar hechas)", async () => {
+    it("vencidas y próximas 7 días de los eventos pedidos (sin contar hechas)", async () => {
       await nuevaTarea(db, { titulo: "Vencida", fechaLimite: "2027-02-25" });
       await nuevaTarea(db, { titulo: "Hoy", fechaLimite: "2027-03-01" });
       await nuevaTarea(db, { titulo: "En una semana", fechaLimite: "2027-03-08" });
@@ -129,11 +147,14 @@ describe("con DB", () => {
       const hecha = await nuevaTarea(db, { titulo: "Hecha vencida", fechaLimite: "2027-02-20" });
       await cambiarEstadoTarea(db, hecha, "hecha", AHORA);
 
-      const resumen = await resumenTareas(db, AHORA);
+      const otro = await crearEvento(db, eventoSchema.parse({ nombre: "Otro" }), { rubros: [] });
+      await nuevaTarea(db, { titulo: "De otro evento", fechaLimite: "2027-02-25", eventoId: otro });
+
+      const resumen = await resumenTareas(db, [await idVibra(db)], AHORA);
       expect(resumen.vencidas.map((t) => t.titulo)).toEqual(["Vencida"]);
       expect(resumen.proximas.map((t) => t.titulo)).toEqual(["Hoy", "En una semana"]);
-      expect(resumen.porArea.get(4)).toEqual({ hechas: 1, total: 5 });
-      expect(resumen.porArea.get(1)).toBeUndefined();
+      expect((await resumenTareas(db, [otro], AHORA)).vencidas[0]).toMatchObject({ evento: "Otro" });
+      expect(await resumenTareas(db, [], AHORA)).toEqual({ vencidas: [], proximas: [] });
     });
   });
 });

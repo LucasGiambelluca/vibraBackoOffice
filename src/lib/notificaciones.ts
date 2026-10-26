@@ -1,6 +1,6 @@
 import { and, count, desc, eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { notificacion } from "@/db/schema";
+import { evento, notificacion, tarea } from "@/db/schema";
 import { ErrorNegocio } from "@/lib/acciones";
 
 export function listarNotificaciones(db: Db, usuarioId: string, limite = 15) {
@@ -9,10 +9,14 @@ export function listarNotificaciones(db: Db, usuarioId: string, limite = 15) {
       id: notificacion.id,
       mensaje: notificacion.mensaje,
       tareaId: notificacion.tareaId,
+      eventoId: tarea.eventoId,
+      evento: evento.nombre,
       leida: notificacion.leida,
       createdAt: notificacion.createdAt,
     })
     .from(notificacion)
+    .innerJoin(tarea, eq(notificacion.tareaId, tarea.id))
+    .innerJoin(evento, eq(tarea.eventoId, evento.id))
     .where(eq(notificacion.usuarioId, usuarioId))
     .orderBy(desc(notificacion.createdAt))
     .limit(limite);

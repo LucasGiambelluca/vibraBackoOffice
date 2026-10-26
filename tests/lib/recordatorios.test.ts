@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "@/db/client";
+import { cerrarEvento } from "@/lib/eventos";
 import type { Actor } from "@/lib/permissions";
 import {
   cancelarRecordatorio,
@@ -11,6 +12,7 @@ import {
 import { cambiarEstadoTarea } from "@/lib/tareas";
 import { crearActores } from "../helpers/actores";
 import { crearDbPrueba } from "../helpers/db";
+import { idVibra } from "../helpers/presupuestos";
 import { AHORA, nuevaTarea, recordatoriosDe } from "../helpers/tareas";
 
 const EN_UNA_HORA = "2027-03-01T09:00"; // hora de La Paz
@@ -57,6 +59,14 @@ describe("con DB", () => {
     expect(await recordatoriosDe(db, tareaId)).toEqual([
       { tipo: "manual", fechaHora: "2027-03-01T13:00:00.000Z", estado: "pendiente" },
     ]);
+  });
+
+  it("con el evento cerrado no se agregan ni cancelan", async () => {
+    await crearRecordatorioManual(db, editor, datos(), AHORA);
+    const [manual] = await listarRecordatorios(db, tareaId);
+    await cerrarEvento(db, await idVibra(db), null);
+    await expect(crearRecordatorioManual(db, editor, datos(), AHORA)).rejects.toThrow("El evento está cerrado");
+    await expect(cancelarRecordatorio(db, editor, manual.id, AHORA)).rejects.toThrow("El evento está cerrado");
   });
 
   it("rechaza fechas pasadas, tareas hechas y a quien no es creador ni admin", async () => {
