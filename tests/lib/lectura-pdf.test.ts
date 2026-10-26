@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
-import { emparejarProveedor, leerCotizacionPdf, MODELO } from "@/lib/lectura-pdf";
+import { aNumero, emparejarProveedor, leerCotizacionPdf, MODELO } from "@/lib/lectura-pdf";
 
 const PROVEEDORES = [
   { id: "p1", nombre: "Sonido Andino" },
@@ -70,29 +70,63 @@ describe("leerCotizacionPdf", () => {
     expect(texto.text).toContain("2 días");
   });
 
-  it("campos vacíos quedan en null", async () => {
+  it("acepta lo que el modelo manda fuera de formato y deja vacío lo dudoso", async () => {
     const { cliente: c } = cliente(
-      conHerramienta({ proveedor: null, moneda: null, precioPorDia: null, descuento2DiasPorcentaje: null, descripcion: "" }),
+      conHerramienta({ proveedor: "LED Show", moneda: "Bs.", precioPorDia: "Bs 3.500", descripcion: null }),
     );
-    expect(await leerCotizacionPdf(Buffer.from(""), CONTEXTO, c)).toMatchObject({
+    expect(await leerCotizacionPdf(Buffer.from(""), CONTEXTO, c)).toEqual({
+      proveedorId: "p2",
+      proveedor: "LED Show",
+      moneda: "BOB",
+      precioDia: "3500",
+      descuento2Dias: null,
+      descripcion: "",
+    });
+
+    const otra = cliente(conHerramienta({ proveedor: "", moneda: "EUR", precioPorDia: "mil", descripcion: "Pantalla LED" }));
+    expect(await leerCotizacionPdf(Buffer.from(""), CONTEXTO, otra.cliente)).toMatchObject({
       proveedorId: null,
+      proveedor: null,
       moneda: null,
       precioDia: null,
-      descuento2Dias: null,
+      descripcion: "Pantalla LED",
     });
   });
 
-  it("si la API falla, no llama a la herramienta o devuelve datos inválidos, pide completar a mano", async () => {
+  it("si el modelo contesta con JSON en texto en vez de usar la herramienta, lo usa igual", async () => {
+    const { cliente: c } = cliente({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: 'Listo:\n```json\n{"proveedor":"Sonido Andino","moneda":"USD","precioPorDia":100}\n```' }],
+    });
+    expect(await leerCotizacionPdf(Buffer.from(""), CONTEXTO, c)).toMatchObject({ proveedorId: "p1", moneda: "USD", precioDia: "100" });
+  });
+
+  it("si la API falla o no llega ningún dato, pide completar a mano", async () => {
     const error = new Anthropic.APIError(500, undefined, "caída", new Headers());
     vi.spyOn(console, "error").mockImplementation(() => {});
     for (const c of [
       cliente(null, error).cliente,
       cliente({ stop_reason: "end_turn", content: [{ type: "text", text: "No puedo." }] }).cliente,
-      cliente(conHerramienta({ proveedor: "X", moneda: "EUR", precioPorDia: "mil", descripcion: "" })).cliente,
+      cliente(conHerramienta({ proveedor: null, moneda: null, precioPorDia: null, descuento2DiasPorcentaje: null, descripcion: "" })).cliente,
     ])
       await expect(leerCotizacionPdf(Buffer.from(""), CONTEXTO, c)).rejects.toThrow(
         "No se pudo leer el PDF. Completá los datos a mano.",
       );
     vi.restoreAllMocks();
+  });
+});
+
+describe("aNumero", () => {
+  it("entiende los formatos habituales", () => {
+    expect(aNumero(1500)).toBe(1500);
+    expect(aNumero("USD 9.000")).toBe(9000);
+    expect(aNumero("9.000,50")).toBe(9000.5);
+    expect(aNumero("9,000.50")).toBe(9000.5);
+    expect(aNumero("3,500")).toBe(3500);
+    expect(aNumero("12.5")).toBe(12.5);
+    expect(aNumero("10%")).toBe(10);
+    expect(aNumero("1.234.567")).toBe(1234567);
+    expect(aNumero("mil")).toBeNull();
+    expect(aNumero(null)).toBeNull();
   });
 });

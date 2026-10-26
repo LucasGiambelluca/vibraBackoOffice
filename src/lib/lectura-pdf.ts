@@ -23,6 +23,40 @@ const respuestaSchema = z.object({
   descripcion: z.string(),
 });
 
+/** Número escrito como texto ("USD 9.000,50", "3,500", "10%"). Un solo separador seguido de 3 dígitos es de miles. */
+export function aNumero(valor: unknown): number | null {
+  if (typeof valor === "number") return Number.isFinite(valor) ? valor : null;
+  if (typeof valor !== "string") return null;
+  const limpio = valor.replace(/[^\d.,-]/g, "");
+  if (!/\d/.test(limpio)) return null;
+  const ultimo = Math.max(limpio.lastIndexOf("."), limpio.lastIndexOf(","));
+  const separadores = limpio.match(/[.,]/g)?.length ?? 0;
+  const decimales = ultimo === -1 ? "" : limpio.slice(ultimo + 1);
+  const repetido = ultimo !== -1 && limpio.split(limpio[ultimo]).length > 2;
+  const esDecimal = ultimo !== -1 && !repetido && !(separadores === 1 && decimales.length === 3);
+  const entero = (esDecimal ? limpio.slice(0, ultimo) : limpio).replace(/[.,]/g, "");
+  const n = Number(esDecimal ? `${entero}.${decimales}` : entero);
+  return Number.isFinite(n) ? n : null;
+}
+
+const MONEDA_ALIAS: Record<string, Moneda> = { BS: "BOB", BOLIVIANOS: "BOB", US: "USD", DOLARES: "USD", PESOS: "ARS" };
+
+/** Lo que manda el modelo no siempre respeta el esquema: se acepta con tolerancia y lo dudoso queda vacío. */
+const leidosSchema = z.object({
+  proveedor: z.string().trim().min(1).nullable().catch(null),
+  moneda: z
+    .unknown()
+    .optional()
+    .transform((v): Moneda | null => {
+      if (typeof v !== "string") return null;
+      const m = v.normalize("NFD").replace(/[^A-Za-z]/g, "").toUpperCase();
+      return (MONEDAS as readonly string[]).includes(m) ? (m as Moneda) : (MONEDA_ALIAS[m] ?? null);
+    }),
+  precioPorDia: z.unknown().optional().transform(aNumero),
+  descuento2DiasPorcentaje: z.unknown().optional().transform(aNumero),
+  descripcion: z.string().nullable().catch(null).transform((v) => v ?? ""),
+});
+
 /** Lo que se completa en el formulario. Nada se guarda: la persona revisa y guarda. */
 export type CotizacionLeida = {
   proveedorId: string | null;
@@ -58,6 +92,25 @@ export function emparejarProveedor(nombre: string | null, proveedores: { id: str
 
 /** Número para el formulario: hasta 2 decimales, sin separadores de miles. */
 const aCampo = (valor: number | null) => (valor === null || !Number.isFinite(valor) || valor < 0 ? null : String(Math.round(valor * 100) / 100));
+
+/** Los datos de la herramienta; si el modelo contestó con JSON en texto, ese JSON. */
+function entradaDe(contenido: Anthropic.ContentBlock[]): unknown {
+  const llamada = contenido.find((b) => b.type === "tool_use" && b.name === HERRAMIENTA);
+  const crudo =
+    llamada?.type === "tool_use"
+      ? llamada.input
+      : contenido
+          .filter((b) => b.type === "text")
+          .map((b) => b.text)
+          .join("\n")
+          .match(/\{[\s\S]*\}/)?.[0];
+  if (typeof crudo !== "string") return crudo ?? null;
+  try {
+    return JSON.parse(crudo);
+  } catch {
+    return null;
+  }
+}
 
 export async function leerCotizacionPdf(
   pdf: Buffer,
@@ -108,10 +161,18 @@ export async function leerCotizacionPdf(
     throw error;
   }
 
-  const llamada = respuesta.content.find((b) => b.type === "tool_use" && b.name === HERRAMIENTA);
-  const leidos = llamada?.type === "tool_use" ? respuestaSchema.safeParse(llamada.input) : null;
-  if (!leidos?.success) throw new ErrorNegocio(NO_SE_PUDO);
-  const datos = leidos.data;
+  const entrada = entradaDe(respuesta.content);
+  const leidos = entrada === null ? null : leidosSchema.safeParse(entrada);
+  const datos = leidos?.success ? leidos.data : null;
+  // Sin ningún dato útil no hay nada que completar.
+  if (!datos || (!datos.proveedor && !datos.moneda && datos.precioPorDia === null && !datos.descripcion)) {
+    console.error(
+      "Lectura de PDF: respuesta sin datos",
+      respuesta.stop_reason,
+      JSON.stringify(respuesta.content.map((b) => (b.type === "thinking" ? { type: "thinking" } : b))).slice(0, 2000),
+    );
+    throw new ErrorNegocio(NO_SE_PUDO);
+  }
   return {
     proveedorId: emparejarProveedor(datos.proveedor, contexto.proveedores),
     proveedor: datos.proveedor,
