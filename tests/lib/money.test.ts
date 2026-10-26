@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  aBob,
+  aArs,
   ahorroCotizacion,
-  desdeBob,
+  desdeArs,
   esMoneda,
   formatearMonto,
   totalCotizacion,
-  totalEvento,
+  totalEnArs,
 } from "@/lib/money";
 
 describe("totalCotizacion y ahorroCotizacion", () => {
@@ -65,69 +65,80 @@ describe("totalCotizacion y ahorroCotizacion", () => {
   });
 });
 
-describe("conversión", () => {
-  const tipos = { USD: 6.96 };
+describe("conversión a ARS", () => {
+  const tipos = { USD: 1400, BOB: 200 };
 
-  it("BOB vale 1 y no necesita tipo de cambio", () => {
-    expect(aBob(150, "BOB", {})).toBe(150);
-    expect(desdeBob(150, "BOB", {})).toBe(150);
+  it("ARS vale 1 y no necesita tipo de cambio", () => {
+    expect(aArs(150, "ARS", {})).toBe(150);
+    expect(desdeArs(150, "ARS", {})).toBe(150);
   });
 
-  it("convierte con el tipo de cambio", () => {
-    expect(aBob(100, "USD", tipos)).toBe(696);
-    expect(desdeBob(696, "USD", tipos)).toBe(100);
+  it("convierte con el tipo de cambio del evento", () => {
+    expect(aArs(100, "USD", tipos)).toBe(140000);
+    expect(aArs(10, "BOB", tipos)).toBe(2000);
+    expect(desdeArs(140000, "USD", tipos)).toBe(100);
+  });
+
+  it("BOB a USD pasa por ARS", () => {
+    const ars = aArs(696, "BOB", { BOB: 201.149425 })!;
+    expect(desdeArs(ars, "USD", { USD: 1400 })).toBe(100);
   });
 
   it("redondea el medio centavo hacia arriba", () => {
     // 1024.85 × 0.5 = 512.425; 1044.87 / 6.96 = 150.125
-    expect(aBob(1024.85, "USD", { USD: 0.5 })).toBe(512.43);
-    expect(desdeBob(1044.87, "USD", tipos)).toBe(150.13);
+    expect(aArs(1024.85, "USD", { USD: 0.5 })).toBe(512.43);
+    expect(desdeArs(1044.87, "USD", { USD: 6.96 })).toBe(150.13);
   });
 
   it("sin tipo de cambio devuelve null", () => {
-    expect(aBob(100, "ARS", tipos)).toBeNull();
-    expect(desdeBob(100, "ARS", tipos)).toBeNull();
+    expect(aArs(100, "BOB", { USD: 1400 })).toBeNull();
+    expect(desdeArs(100, "BOB", { USD: 1400 })).toBeNull();
   });
 });
 
-describe("totalEvento", () => {
-  it("suma en BOB", () => {
+describe("totalEnArs", () => {
+  it("suma en ARS", () => {
     const montos = [
-      { monto: 1000, moneda: "BOB" as const },
+      { monto: 1000, moneda: "ARS" as const },
       { monto: 100, moneda: "USD" as const },
     ];
-    expect(totalEvento(montos, { USD: 6.96 })).toEqual({ bob: 1696, faltan: [] });
+    expect(totalEnArs(montos, { USD: 1400 })).toEqual({ ars: 141000, faltan: [] });
   });
 
   it("sin montos da 0", () => {
-    expect(totalEvento([], {})).toEqual({ bob: 0, faltan: [] });
+    expect(totalEnArs([], {})).toEqual({ ars: 0, faltan: [] });
   });
 
   it("si falta un tipo de cambio no da número y avisa cuáles faltan", () => {
     const montos = [
-      { monto: 1, moneda: "ARS" as const },
       { monto: 1, moneda: "USD" as const },
-      { monto: 2, moneda: "ARS" as const },
+      { monto: 1, moneda: "BOB" as const },
+      { monto: 2, moneda: "USD" as const },
     ];
-    expect(totalEvento(montos, {})).toEqual({ bob: null, faltan: ["ARS", "USD"] });
+    expect(totalEnArs(montos, {})).toEqual({ ars: null, faltan: ["BOB", "USD"] });
   });
 
   it("no arrastra error de punto flotante", () => {
     const montos = [
-      { monto: 0.1, moneda: "BOB" as const },
-      { monto: 0.2, moneda: "BOB" as const },
+      { monto: 0.1, moneda: "ARS" as const },
+      { monto: 0.2, moneda: "ARS" as const },
     ];
-    expect(totalEvento(montos, {}).bob).toBe(0.3);
+    expect(totalEnArs(montos, {}).ars).toBe(0.3);
+  });
+
+  it("aguanta montos grandes en ARS", () => {
+    expect(totalEnArs([{ monto: 2500000, moneda: "USD" }], { USD: 1435.5 })).toEqual({ ars: 3588750000, faltan: [] });
   });
 });
 
 describe("formato", () => {
-  it("formatea con separadores de Bolivia", () => {
-    expect(formatearMonto(1234.5, "USD")).toBe("USD 1.234,50");
+  it("formatea con separadores de Argentina", () => {
+    expect(formatearMonto(1234.5, "ARS")).toBe("ARS 1.234,50");
+    expect(formatearMonto(18900000, "ARS")).toBe("ARS 18.900.000,00");
   });
 
   it("esMoneda", () => {
-    expect(esMoneda("ARS")).toBe(true);
+    expect(esMoneda("BOB")).toBe(true);
     expect(esMoneda("EUR")).toBe(false);
   });
 });

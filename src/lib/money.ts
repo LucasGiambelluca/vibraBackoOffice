@@ -1,18 +1,19 @@
 // Funciones puras de plata: sin DB ni Next, se usan en servidor y cliente.
 
-export const MONEDAS = ["BOB", "USD", "ARS"] as const;
+export const MONEDAS = ["ARS", "USD", "BOB"] as const;
 export type Moneda = (typeof MONEDAS)[number];
 
-export const MONEDAS_EXTRANJERAS = ["USD", "ARS"] as const;
-export type MonedaExtranjera = (typeof MONEDAS_EXTRANJERAS)[number];
+/** La moneda base es ARS: las demás necesitan tipo de cambio (uno por evento). */
+export const MONEDAS_CAMBIO = ["USD", "BOB"] as const;
+export type MonedaCambio = (typeof MONEDAS_CAMBIO)[number];
 
-/** Cuántos BOB vale 1 unidad de cada moneda. BOB siempre vale 1 y no se incluye. */
-export type TiposCambio = Partial<Record<MonedaExtranjera, number>>;
+/** Cuántos ARS vale 1 unidad de cada moneda. ARS siempre vale 1 y no se incluye. */
+export type TiposCambio = Partial<Record<MonedaCambio, number>>;
 
 export type Precio = { precioDia: number; descuento2Dias: number; dias: number };
 
-/** Total en BOB del evento; `null` si falta el tipo de cambio de alguna moneda usada. */
-export type TotalBob = { bob: number; faltan: [] } | { bob: null; faltan: Moneda[] };
+/** Total en ARS; `null` si falta el tipo de cambio de alguna moneda usada. */
+export type TotalArs = { ars: number; faltan: [] } | { ars: null; faltan: Moneda[] };
 
 export function esMoneda(valor: string): valor is Moneda {
   return (MONEDAS as readonly string[]).includes(valor);
@@ -49,35 +50,35 @@ export function ahorroCotizacion(precio: Precio): number {
   return desdeCentavos(aCentavos(precio.precioDia) * BigInt(2) - totalCentavos(precio));
 }
 
-/** Tipo de cambio en millonésimas de BOB, o null si no está cargado. */
-function valorEnBob(moneda: Moneda, tipos: TiposCambio): bigint | null {
-  if (moneda === "BOB") return MILLONESIMAS;
+/** Tipo de cambio en millonésimas de ARS, o null si no está cargado. */
+function valorEnArs(moneda: Moneda, tipos: TiposCambio): bigint | null {
+  if (moneda === "ARS") return MILLONESIMAS;
   const valor = tipos[moneda];
   return valor === undefined ? null : aEntero(valor, 1e6);
 }
 
-function aBobCentavos(monto: number, valor: bigint): bigint {
+function aArsCentavos(monto: number, valor: bigint): bigint {
   return dividir(aCentavos(monto) * valor, MILLONESIMAS);
 }
 
-export function aBob(monto: number, moneda: Moneda, tipos: TiposCambio): number | null {
-  const valor = valorEnBob(moneda, tipos);
-  return valor === null ? null : desdeCentavos(aBobCentavos(monto, valor));
+export function aArs(monto: number, moneda: Moneda, tipos: TiposCambio): number | null {
+  const valor = valorEnArs(moneda, tipos);
+  return valor === null ? null : desdeCentavos(aArsCentavos(monto, valor));
 }
 
-export function desdeBob(montoBob: number, moneda: Moneda, tipos: TiposCambio): number | null {
-  const valor = valorEnBob(moneda, tipos);
-  return valor === null ? null : desdeCentavos(dividir(aCentavos(montoBob) * MILLONESIMAS, valor));
+export function desdeArs(montoArs: number, moneda: Moneda, tipos: TiposCambio): number | null {
+  const valor = valorEnArs(moneda, tipos);
+  return valor === null ? null : desdeCentavos(dividir(aCentavos(montoArs) * MILLONESIMAS, valor));
 }
 
-export function totalEvento(montos: { monto: number; moneda: Moneda }[], tipos: TiposCambio): TotalBob {
-  const faltan = [...new Set(montos.map((m) => m.moneda))].filter((m) => valorEnBob(m, tipos) === null).sort();
-  if (faltan.length > 0) return { bob: null, faltan };
-  const suma = montos.reduce((total, m) => total + aBobCentavos(m.monto, valorEnBob(m.moneda, tipos)!), BigInt(0));
-  return { bob: desdeCentavos(suma), faltan: [] };
+export function totalEnArs(montos: { monto: number; moneda: Moneda }[], tipos: TiposCambio): TotalArs {
+  const faltan = [...new Set(montos.map((m) => m.moneda))].filter((m) => valorEnArs(m, tipos) === null).sort();
+  if (faltan.length > 0) return { ars: null, faltan };
+  const suma = montos.reduce((total, m) => total + aArsCentavos(m.monto, valorEnArs(m.moneda, tipos)!), BigInt(0));
+  return { ars: desdeCentavos(suma), faltan: [] };
 }
 
-const FORMATO = new Intl.NumberFormat("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const FORMATO = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function formatearMonto(monto: number, moneda: Moneda): string {
   return `${moneda} ${FORMATO.format(monto)}`;
