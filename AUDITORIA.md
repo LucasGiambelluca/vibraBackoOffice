@@ -1,13 +1,13 @@
 # Auditoría de producción — Vibra 2027
 
-**Veredicto: CASI** — 0 🔴 bloqueantes · 2 🟠 altos · 5 🟡 medios · 1 ⚪ bajo abiertos
+**Veredicto: CASI** — 0 🔴 bloqueantes · 1 🟠 alto · 5 🟡 medios · 1 ⚪ bajo abiertos
 
-Primera pasada: 5 🟠 · 7 🟡 · 1 ⚪. Resueltos el mismo día: A1, A3, A5, M3, M4 (ver **Resueltos**).
+Primera pasada: 5 🟠 · 7 🟡 · 1 ⚪. Resueltos: A1, A3, A5, M3, M4 (2026-10-25) y A2 (2026-10-26) (ver **Resueltos**).
 
 Fecha: 2026-10-25 · Rama `plan-4-deploy` (529fd7a + cambios sin commitear en `next.config.ts` y `login-form.tsx`).
 Verificado: lint ✅, `tsc --noEmit` ✅, `vitest` 196/196 ✅, `npm audit` (ver 1.8). E2E: última corrida 2026-10-24 ✅ (no se volvió a correr).
 
-No hay nada que exponga datos ni pierda plata. Para llegar a **LISTO** faltan A2 (decisión de negocio) y A4 (se resuelve en el primer deploy).
+No hay nada que exponga datos ni pierda plata. Para llegar a **LISTO** falta A4 (se resuelve en el primer deploy).
 
 Contexto: back office interno de pocos usuarios, sin pasarela de pagos ni webhooks. Los chequeos de cobros, idempotencia de pagos y firma HMAC no aplican (N/A). La "plata" acá son los montos de cotizaciones y el total del evento.
 
@@ -19,7 +19,6 @@ Contexto: back office interno de pocos usuarios, sin pasarela de pagos ni webhoo
 
 | # | Hallazgo | Dónde | Arreglo |
 |---|---|---|---|
-| A2 | **Un editor puede cambiar el precio de una cotización ya aprobada**, y el total del evento cambia sin que nadie lo apruebe de nuevo ni quede registro de quién lo cambió. Tampoco se guarda quién aprobó ni cuándo. | `src/lib/cotizaciones.ts:65-82`, `src/app/(app)/presupuestos/operaciones.ts:37-46`, `src/lib/cotizaciones.ts:88-109` | Decisión de negocio: (a) editar una aprobada la vuelve a `pendiente`, o (b) solo el admin edita aprobadas. Más columnas `aprobadaPor` / `aprobadaAt`. |
 | A4 | **Los backups quedan en el mismo VPS y el restore nunca se probó.** Si se pierde el disco o el VPS, se pierden la base y los backups juntos. La copia afuera es manual y "recomendada". | `docker-compose.yml:84-95`, `deploy/backup.sh`, `docs/deploy.md` §6 | Copia automática fuera del VPS (rclone a un bucket o al Drive, o snapshots del proveedor) y un restore de prueba en el primer deploy, anotado en `docs/deploy.md`. |
 
 ### 🟡 Medios
@@ -42,6 +41,7 @@ Contexto: back office interno de pocos usuarios, sin pasarela de pagos ni webhoo
 
 | # | Qué se hizo |
 |---|---|
+| A2 | Solo el admin aprueba. Se guarda quién y cuándo (`aprobada_por`, `aprobada_at`, migración `0006`). Si un editor edita una aprobada, vuelve a pendiente en el mismo UPDATE; si la edita el admin, sigue aprobada (`src/lib/cotizaciones.ts`, `src/app/(app)/presupuestos/operaciones.ts`). La UI muestra quién aprobó y avisa al editor antes de guardar. |
 | A1 | Headers en `deploy/Caddyfile`: HSTS, `X-Frame-Options DENY`, `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy`; se quitan `Server` y `X-Powered-By`. |
 | A3 | Latido del worker en la tabla `latido` (`src/lib/latido.ts`, migración `0005`); `/api/salud/worker` da 503 sin ciclo en 10 min; los emails que quedan `fallido` avisan a los admins en la campanita (`src/lib/envio-recordatorios.ts`); monitores externos documentados en `docs/deploy.md` §4. |
 | A5 | `docs/deploy.md` §2–3: guardar la versión y hacer un `pg_dump` antes de actualizar; rollback con y sin migraciones (recrea la base para no dejar tablas nuevas colgadas). El restore de §6 corregido igual. |
@@ -70,7 +70,7 @@ Contexto: back office interno de pocos usuarios, sin pasarela de pagos ni webhoo
 - N/A Idempotencia de cobros y firma HMAC de webhooks: no hay pagos.
 - ✅ Migraciones versionadas con drizzle-kit (`drizzle/0000…0004`), aplicadas por el servicio `migrate` antes de levantar la app.
 - ✅ Constraints: CHECK de moneda, estado, precio y descuento; índice único parcial "una aprobada por rubro" (`src/db/presupuestos-schema.ts:63-68`); FKs con `restrict` / `cascade` / `set null` explícitos.
-- ❌ Trazabilidad de cambios en montos aprobados → **A2**.
+- ✅ Trazabilidad de montos aprobados: quién y cuándo aprobó; si un editor cambia una aprobada, vuelve a pendiente (A2).
 
 ### 3. Confiabilidad
 - ✅ Sin errores tragados: `intentar` solo convierte `ErrorNegocio` y relanza el resto (`src/lib/acciones.ts:11-19`). Los únicos `catch` que no relanzan registran el error (`src/lib/adjuntos.ts:43-45`, `src/app/api/salud/route.ts:9-11`, `src/worker/ciclo.ts:28-29`).
@@ -84,7 +84,7 @@ Contexto: back office interno de pocos usuarios, sin pasarela de pagos ni webhoo
 - N/A Correlation IDs: un solo servicio web.
 - ❌ Error tracking y alertas → **A3**.
 - ✅ Health: `/api/salud` prueba la DB y lo usa el healthcheck de Docker (`docker-compose.yml:54-59`). El del worker falta → **M4**.
-- ❌ Registro de eventos de plata (quién aprobó o cambió un monto) → **A2**.
+- 🟡 Registro de eventos de plata: se guarda quién y cuándo aprobó (A2); no hay historial de cada cambio de monto.
 
 ### 5. Testing
 - ✅ Flujos críticos: aprobación, reversión, totales en varias monedas, redondeo, permisos y worker; 196 tests.
@@ -119,7 +119,6 @@ Contexto: back office interno de pocos usuarios, sin pasarela de pagos ni webhoo
 
 ## Camino a LISTO
 
-1. **A2**: decidir la regla para editar una cotización aprobada y agregar `aprobadaPor` / `aprobadaAt` (1–2 h con tests).
-2. **A4**: copia automática fuera del VPS y restore de prueba, en el primer deploy (1 h).
+1. **A4**: copia automática fuera del VPS y restore de prueba, en el primer deploy (1 h).
 
 Medios baratos que conviene sumar: **M5** (índices de auth) y **M1** (actualizar vitest).

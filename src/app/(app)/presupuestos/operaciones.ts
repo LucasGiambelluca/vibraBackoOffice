@@ -11,7 +11,7 @@ import {
   nuevaCotizacionSchema,
   revertirAprobacion,
 } from "@/lib/cotizaciones";
-import { exigir, type Actor } from "@/lib/permissions";
+import { can, exigir, type Actor } from "@/lib/permissions";
 
 // `datos` llega de Object.fromEntries(formData): el PDF viene como File en `adjunto`.
 
@@ -41,14 +41,17 @@ export function edicionCotizacion(db: Db, actor: Actor, datos: unknown): Promise
     const { cotizacionId: id, ...valores } = validar(cotizacionSchema.extend({ cotizacionId }), campos);
     const quitar = campos.quitarAdjunto === "on";
     // Archivo nuevo: se reemplaza. Sin archivo: se quita si lo pidió, si no se conserva.
-    await conPdfNuevo(adjunto, (nombre) => editarCotizacion(db, id, valores, nombre ?? (quitar ? null : undefined)));
+    // Si la edita alguien que no puede aprobar, una aprobada vuelve a pendiente.
+    await conPdfNuevo(adjunto, (nombre) =>
+      editarCotizacion(db, id, valores, nombre ?? (quitar ? null : undefined), can(actor.role, "aprobar")),
+    );
   });
 }
 
 export function aprobacion(db: Db, actor: Actor, datos: unknown): Promise<Resultado> {
   return intentar(async () => {
     exigir(actor, "aprobar");
-    await aprobarCotizacion(db, validar(idSchema, datos).cotizacionId);
+    await aprobarCotizacion(db, validar(idSchema, datos).cotizacionId, actor.id);
   });
 }
 

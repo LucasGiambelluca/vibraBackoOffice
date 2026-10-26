@@ -20,6 +20,7 @@ import {
 import { borrarProveedor } from "@/lib/proveedores";
 import { borrarRubro } from "@/lib/rubros";
 import { guardarTipoCambio } from "@/lib/tipos-cambio";
+import { crearActores } from "../helpers/actores";
 import { crearDbPrueba } from "../helpers/db";
 import { COTIZACION, idRubro, nuevaCotizacion, nuevoProveedor, pdf, usarUploadsTemporal } from "../helpers/presupuestos";
 
@@ -120,6 +121,20 @@ describe("con DB", () => {
       expect(await estado(db, b)).toBe("aprobada");
     });
 
+    it("guarda quién y cuándo aprobó; la que queda descartada lo pierde", async () => {
+      const { admin } = await crearActores(db);
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      const b = await nuevaCotizacion(db, sonido, proveedor);
+      await aprobarCotizacion(db, a, admin.id);
+      const fila = await obtenerCotizacion(db, a);
+      expect(fila?.aprobadaPor).toBe(admin.id);
+      expect(fila?.aprobadaAt).toBeInstanceOf(Date);
+      expect((await listarCotizaciones(db, { estado: "aprobada" }))[0].aprobador).toBe("admin@vibra.bo");
+
+      await aprobarCotizacion(db, b, admin.id);
+      expect(await obtenerCotizacion(db, a)).toMatchObject({ aprobadaPor: null, aprobadaAt: null });
+    });
+
     it("dos aprobaciones a la vez en el mismo rubro terminan con una sola aprobada", async () => {
       const a = await nuevaCotizacion(db, sonido, proveedor);
       const b = await nuevaCotizacion(db, sonido, proveedor);
@@ -159,7 +174,7 @@ describe("con DB", () => {
       const b = await nuevaCotizacion(db, sonido, proveedor);
       await aprobarCotizacion(db, a);
       await revertirAprobacion(db, a);
-      expect(await estado(db, a)).toBe("pendiente");
+      expect(await obtenerCotizacion(db, a)).toMatchObject({ estado: "pendiente", aprobadaPor: null, aprobadaAt: null });
       expect(await estado(db, b)).toBe("descartada");
     });
 
@@ -203,6 +218,15 @@ describe("con DB", () => {
       await expect(editarCotizacion(db, a, { ...cambios, proveedorId: proveedor })).rejects.toThrow(
         "La cotización no existe",
       );
+    });
+
+    it("una aprobada vuelve a pendiente, salvo que se pida conservar la aprobación", async () => {
+      const a = await nuevaCotizacion(db, sonido, proveedor);
+      await aprobarCotizacion(db, a);
+      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, undefined, true);
+      expect(await estado(db, a)).toBe("aprobada");
+      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor });
+      expect(await estado(db, a)).toBe("pendiente");
     });
 
     it("falla si no existe", async () => {

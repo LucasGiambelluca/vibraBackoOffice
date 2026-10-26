@@ -4,6 +4,7 @@ import { FormAccion } from "@/components/form-accion";
 import { Card, CardContent } from "@/components/ui/card";
 import { db } from "@/db";
 import { obtenerCotizacion } from "@/lib/cotizaciones";
+import { can } from "@/lib/permissions";
 import { listarProveedores } from "@/lib/proveedores";
 import { obtenerRubro } from "@/lib/rubros";
 import { usuarioActual } from "@/lib/session";
@@ -13,7 +14,7 @@ import { CotizacionCampos } from "../../cotizacion-campos";
 export default async function EditarCotizacionPage({
   params,
 }: PageProps<"/presupuestos/[rubroId]/[cotizacionId]">) {
-  await usuarioActual();
+  const usuario = await usuarioActual();
   const { rubroId, cotizacionId } = await params;
   const [cotizacion, rubro, proveedores] = await Promise.all([
     obtenerCotizacion(db, cotizacionId),
@@ -23,6 +24,7 @@ export default async function EditarCotizacionPage({
   if (!cotizacion || !rubro || cotizacion.rubroId !== rubroId) notFound();
 
   const volver = `/presupuestos/${rubroId}`;
+  const pierdeAprobacion = cotizacion.estado === "aprobada" && !can(usuario.role, "aprobar");
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -32,6 +34,13 @@ export default async function EditarCotizacionPage({
         </Link>
         <h1 className="text-2xl font-semibold">Editar cotización</h1>
       </div>
+
+      {pierdeAprobacion && (
+        <p className="text-sm text-destructive">
+          Esta cotización está aprobada. Si guardás cambios vuelve a pendiente y un admin la tiene que aprobar de
+          nuevo.
+        </p>
+      )}
 
       <Card>
         <CardContent>

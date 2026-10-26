@@ -44,6 +44,8 @@ activaciones, cobertura Vibo TV. Mientras tanto se gestionan como rubros o tarea
 3. **Aprobación**: un rubro tiene como máximo una cotización aprobada. Aprobar una
    pasa las demás del rubro a *descartada*, en una única transacción. Solo admin aprueba.
    Admin puede revertir una aprobación (vuelve a *pendiente*; las descartadas quedan descartadas).
+   Se guarda quién aprobó y cuándo. Si un editor edita una aprobada, vuelve a *pendiente*
+   hasta que el admin la apruebe de nuevo; si la edita el admin, sigue aprobada.
 4. **Total del evento** = suma de `total_bob` de cotizaciones aprobadas.
 5. Si falta el tipo de cambio de una moneda usada, el total muestra una advertencia
    y no un número.

@@ -52,6 +52,9 @@ export const cotizacion = pgTable(
     /** Nombre del PDF en UPLOADS_DIR (ver src/lib/adjuntos.ts). */
     adjunto: text("adjunto"),
     estado: text("estado").notNull().default("pendiente"),
+    /** Quién y cuándo la aprobó. Solo tienen valor mientras está aprobada. */
+    aprobadaPor: text("aprobada_por").references(() => user.id, { onDelete: "set null" }),
+    aprobadaAt: timestamp("aprobada_at"),
     creadoPor: text("creado_por").references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at")

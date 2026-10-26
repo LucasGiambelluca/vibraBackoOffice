@@ -11,6 +11,7 @@ import { idMasBarata, listarCotizaciones } from "@/lib/cotizaciones";
 import { formatearMonto } from "@/lib/money";
 import { can } from "@/lib/permissions";
 import { listarProveedores } from "@/lib/proveedores";
+import { formatearFechaHora } from "@/lib/reminders";
 import { obtenerRubro } from "@/lib/rubros";
 import { usuarioActual } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -109,6 +110,11 @@ export default async function RubroPage({ params }: PageProps<"/presupuestos/[ru
                 )}
                 <TableCell>
                   <EstadoCotizacion estado={c.estado} />
+                  {c.estado === "aprobada" && c.aprobadaAt && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {c.aprobador ?? "Usuario borrado"} · {formatearFechaHora(c.aprobadaAt)}
+                    </p>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center justify-end gap-1">

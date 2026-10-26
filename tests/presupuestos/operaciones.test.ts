@@ -80,6 +80,38 @@ describe("edicionCotizacion", () => {
   });
 });
 
+describe("edición de una cotización aprobada", () => {
+  const editar = (actor: Actor, cotizacionId: string) =>
+    edicionCotizacion(db, actor, { ...COTIZACION, cotizacionId, proveedorId, precioDia: "900" });
+
+  it("si la edita un editor, vuelve a pendiente hasta que el admin la apruebe de nuevo", async () => {
+    const id = await nuevaCotizacion(db, rubroId, proveedorId);
+    await aprobacion(db, admin, { cotizacionId: id });
+    expect(await editar(editor, id)).toEqual({ ok: true });
+    expect(await obtenerCotizacion(db, id)).toMatchObject({
+      precioDia: "900.00",
+      estado: "pendiente",
+      aprobadaPor: null,
+      aprobadaAt: null,
+    });
+  });
+
+  it("si la edita el admin, sigue aprobada", async () => {
+    const id = await nuevaCotizacion(db, rubroId, proveedorId);
+    await aprobacion(db, admin, { cotizacionId: id });
+    expect(await editar(admin, id)).toEqual({ ok: true });
+    expect(await obtenerCotizacion(db, id)).toMatchObject({ estado: "aprobada", aprobadaPor: admin.id });
+  });
+
+  it("el editor puede editar una descartada sin cambiarle el estado", async () => {
+    const a = await nuevaCotizacion(db, rubroId, proveedorId);
+    const b = await nuevaCotizacion(db, rubroId, proveedorId);
+    await aprobacion(db, admin, { cotizacionId: a });
+    expect(await editar(editor, b)).toEqual({ ok: true });
+    expect((await obtenerCotizacion(db, b))?.estado).toBe("descartada");
+  });
+});
+
 describe("aprobación y borrado", () => {
   it("el editor no puede aprobar, revertir ni borrar", async () => {
     const id = await nuevaCotizacion(db, rubroId, proveedorId);
@@ -92,7 +124,7 @@ describe("aprobación y borrado", () => {
   it("el admin aprueba, revierte y borra", async () => {
     const id = await nuevaCotizacion(db, rubroId, proveedorId);
     expect(await aprobacion(db, admin, { cotizacionId: id })).toEqual({ ok: true });
-    expect((await obtenerCotizacion(db, id))?.estado).toBe("aprobada");
+    expect(await obtenerCotizacion(db, id)).toMatchObject({ estado: "aprobada", aprobadaPor: admin.id });
     expect(await reversion(db, admin, { cotizacionId: id })).toEqual({ ok: true });
     expect(await bajaCotizacion(db, admin, { cotizacionId: id })).toEqual({ ok: true });
     expect(await obtenerCotizacion(db, id)).toBeUndefined();

@@ -1,7 +1,7 @@
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import { cotizacion, proveedor, rubro } from "@/db/schema";
+import { cotizacion, proveedor, rubro, user } from "@/db/schema";
 import { conRestricciones, ErrorNegocio } from "@/lib/acciones";
 import { borrarPdf } from "@/lib/adjuntos";
 import { aBob, ahorroCotizacion, MONEDAS, totalCotizacion, type Moneda } from "@/lib/money";
@@ -58,20 +58,36 @@ export async function crearCotizacion(
   return fila.id;
 }
 
+const SIN_APROBACION = { aprobadaPor: null, aprobadaAt: null };
+
 /**
  * `adjunto`: undefined = se conserva el actual; null = se quita; string = se reemplaza.
  * El archivo anterior se borra del disco después de actualizar la fila.
+ * Si estaba aprobada vuelve a pendiente (el admin la tiene que aprobar de nuevo),
+ * salvo con `conservarAprobacion`, que es cuando la edita el propio admin.
  */
 export async function editarCotizacion(
   db: Db,
   id: string,
   datos: DatosCotizacion,
   adjunto?: string | null,
+  conservarAprobacion = false,
 ): Promise<void> {
   const [actual] = await db.select({ adjunto: cotizacion.adjunto }).from(cotizacion).where(eq(cotizacion.id, id));
   if (!actual) throw new ErrorNegocio("La cotización no existe");
 
-  const cambios = adjunto === undefined ? datos : { ...datos, adjunto };
+  const cambios = {
+    ...datos,
+    ...(adjunto === undefined ? {} : { adjunto }),
+    // En el mismo UPDATE, para no pisar una aprobación o reversión simultánea.
+    ...(conservarAprobacion
+      ? {}
+      : {
+          estado: sql`case when ${cotizacion.estado} = 'aprobada' then 'pendiente' else ${cotizacion.estado} end`,
+          aprobadaPor: sql`case when ${cotizacion.estado} = 'aprobada' then null else ${cotizacion.aprobadaPor} end`,
+          aprobadaAt: sql`case when ${cotizacion.estado} = 'aprobada' then null else ${cotizacion.aprobadaAt} end`,
+        }),
+  };
   const filas = await conRestricciones(
     () => db.update(cotizacion).set(cambios).where(eq(cotizacion.id, id)).returning({ id: cotizacion.id }),
     { fk: "Proveedor inválido" },
@@ -85,7 +101,7 @@ export async function editarCotizacion(
  * Aprueba y pasa a descartada el resto de las cotizaciones del rubro, en una transacción.
  * Se bloquea la fila del rubro para que dos aprobaciones del mismo rubro se hagan de a una.
  */
-export async function aprobarCotizacion(db: Db, id: string): Promise<void> {
+export async function aprobarCotizacion(db: Db, id: string, aprobadaPor: string | null = null): Promise<void> {
   await conRestricciones(
     () =>
       db.transaction(async (tx) => {
@@ -100,9 +116,12 @@ export async function aprobarCotizacion(db: Db, id: string): Promise<void> {
         // Primero se descartan las demás para no chocar con el índice de una aprobada por rubro.
         await tx
           .update(cotizacion)
-          .set({ estado: "descartada" })
+          .set({ estado: "descartada", ...SIN_APROBACION })
           .where(and(eq(cotizacion.rubroId, fila.rubroId), ne(cotizacion.id, id)));
-        await tx.update(cotizacion).set({ estado: "aprobada" }).where(eq(cotizacion.id, id));
+        await tx
+          .update(cotizacion)
+          .set({ estado: "aprobada", aprobadaPor, aprobadaAt: new Date() })
+          .where(eq(cotizacion.id, id));
       }),
     { unico: "Otra cotización del rubro se aprobó al mismo tiempo. Recargá la página." },
   );
@@ -111,7 +130,7 @@ export async function aprobarCotizacion(db: Db, id: string): Promise<void> {
 export async function revertirAprobacion(db: Db, id: string): Promise<void> {
   const filas = await db
     .update(cotizacion)
-    .set({ estado: "pendiente" })
+    .set({ estado: "pendiente", ...SIN_APROBACION })
     .where(and(eq(cotizacion.id, id), eq(cotizacion.estado, "aprobada")))
     .returning({ id: cotizacion.id });
   if (filas.length === 0) throw new ErrorNegocio("La cotización no está aprobada");
@@ -148,11 +167,14 @@ export async function listarCotizaciones(db: Db, filtro: FiltroCotizaciones = {}
         descuento2Dias: cotizacion.descuento2Dias,
         adjunto: cotizacion.adjunto,
         estado: cotizacion.estado,
+        aprobador: user.name,
+        aprobadaAt: cotizacion.aprobadaAt,
         createdAt: cotizacion.createdAt,
       })
       .from(cotizacion)
       .innerJoin(rubro, eq(cotizacion.rubroId, rubro.id))
       .innerJoin(proveedor, eq(cotizacion.proveedorId, proveedor.id))
+      .leftJoin(user, eq(cotizacion.aprobadaPor, user.id))
       .where(
         and(
           filtro.rubroId ? eq(cotizacion.rubroId, filtro.rubroId) : undefined,
