@@ -161,7 +161,7 @@ function Visor({
         if (hay && Math.abs(dx) > 50) mover(dx < 0 ? 1 : -1);
       }}
       aria-label={actual.nombre}
-      className="m-0 size-full max-h-none max-w-none bg-black/95 p-0 text-white backdrop:bg-black/80"
+      className="m-0 size-full max-h-none max-w-none bg-black p-0 text-white backdrop:bg-black"
     >
       <div className="flex h-full flex-col">
         <div className="flex items-center gap-2 px-3 py-2 md:px-5">

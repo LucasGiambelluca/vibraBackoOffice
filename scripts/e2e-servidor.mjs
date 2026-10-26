@@ -14,6 +14,8 @@ const env = {
   WORKER_EN_APP: "true",
   WORKER_INTERVALO_MS: "2000",
   SMTP_HOST: "",
+  // Sin IA: "Completar desde el PDF" no aparece y no se llama a la API.
+  ANTHROPIC_API_KEY: "",
 };
 
 rmSync(".data/e2e", { recursive: true, force: true });
