@@ -1,32 +1,29 @@
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import { area, rubro } from "@/db/schema";
+import { grupo, rubro } from "@/db/schema";
 import { conRestricciones, ErrorNegocio } from "@/lib/acciones";
+
+// Catálogo de rubros de la productora. Cada evento elige cuáles usa (src/lib/evento-rubros.ts).
 
 export const rubroSchema = z.object({
   nombre: z.string("Falta el nombre").trim().min(2, "El nombre es muy corto").max(80, "El nombre es muy largo"),
-  areaId: z.coerce.number("Área inválida").int("Área inválida").positive("Área inválida"),
-  dias: z.enum(["1", "2"], "Los días deben ser 1 o 2").transform(Number),
+  grupoId: z.coerce.number("Grupo inválido").int("Grupo inválido").positive("Grupo inválido"),
 });
 
 export type DatosRubro = z.infer<typeof rubroSchema>;
 
-const MENSAJES = { unico: "Ya existe un rubro con ese nombre", fk: "Área inválida" };
-
-export function listarAreas(db: Db) {
-  return db.select().from(area).orderBy(asc(area.id));
-}
+const MENSAJES = { unico: "Ya existe un rubro con ese nombre", fk: "Grupo inválido" };
 
 function consultaRubros(db: Db) {
   return db
-    .select({ id: rubro.id, nombre: rubro.nombre, dias: rubro.dias, areaId: rubro.areaId, area: area.nombre })
+    .select({ id: rubro.id, nombre: rubro.nombre, grupoId: rubro.grupoId, grupo: grupo.nombre })
     .from(rubro)
-    .innerJoin(area, eq(rubro.areaId, area.id));
+    .innerJoin(grupo, eq(rubro.grupoId, grupo.id));
 }
 
 export function listarRubros(db: Db) {
-  return consultaRubros(db).orderBy(asc(area.id), asc(rubro.nombre));
+  return consultaRubros(db).orderBy(asc(grupo.orden), asc(rubro.nombre));
 }
 
 export async function obtenerRubro(db: Db, id: string) {
@@ -50,10 +47,11 @@ export async function editarRubro(db: Db, id: string, datos: DatosRubro): Promis
   if (filas.length === 0) throw new ErrorNegocio("El rubro no existe");
 }
 
+/** Un rubro usado en algún evento es historial: no se borra. */
 export async function borrarRubro(db: Db, id: string): Promise<void> {
   const filas = await conRestricciones(
     () => db.delete(rubro).where(eq(rubro.id, id)).returning({ id: rubro.id }),
-    { fk: "El rubro tiene cotizaciones: borralas primero" },
+    { fk: "El rubro se usa en algún evento: no se puede borrar" },
   );
   if (filas.length === 0) throw new ErrorNegocio("El rubro no existe");
 }

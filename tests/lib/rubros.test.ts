@@ -1,32 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "@/db/client";
-import {
-  borrarRubro,
-  crearRubro,
-  editarRubro,
-  listarAreas,
-  listarRubros,
-  obtenerRubro,
-  rubroSchema,
-} from "@/lib/rubros";
+import { borrarRubro, crearRubro, editarRubro, listarRubros, obtenerRubro, rubroSchema } from "@/lib/rubros";
 import { crearDbPrueba } from "../helpers/db";
 
-const datos = (extra: Record<string, string> = {}) =>
-  rubroSchema.parse({ nombre: "Catering", areaId: "3", dias: "1", ...extra });
+const datos = (extra: Record<string, string> = {}) => rubroSchema.parse({ nombre: "Catering", grupoId: "3", ...extra });
 
 describe("rubroSchema", () => {
-  it("convierte área y días a número", () => {
-    expect(datos()).toEqual({ nombre: "Catering", areaId: 3, dias: 1 });
+  it("convierte el grupo a número", () => {
+    expect(datos()).toEqual({ nombre: "Catering", grupoId: 3 });
   });
 
-  it("días solo 1 o 2", () => {
-    const resultado = rubroSchema.safeParse({ nombre: "Catering", areaId: "3", dias: "3" });
-    expect(resultado.error?.issues[0].message).toBe("Los días deben ser 1 o 2");
-  });
-
-  it("área vacía es inválida", () => {
-    const resultado = rubroSchema.safeParse({ nombre: "Catering", areaId: "", dias: "1" });
-    expect(resultado.error?.issues[0].message).toBe("Área inválida");
+  it("grupo vacío es inválido", () => {
+    const resultado = rubroSchema.safeParse({ nombre: "Catering", grupoId: "" });
+    expect(resultado.error?.issues[0].message).toBe("Grupo inválido");
   });
 });
 
@@ -36,13 +22,7 @@ describe("con DB", () => {
     db = await crearDbPrueba();
   });
 
-  it("listarAreas devuelve las 6 áreas en orden", async () => {
-    const areas = await listarAreas(db);
-    expect(areas).toHaveLength(6);
-    expect(areas[0]).toEqual({ id: 1, nombre: "Marketing y Audiovisual" });
-  });
-
-  it("listarRubros trae el nombre del área, ordenado por área y nombre", async () => {
+  it("listarRubros trae el nombre del grupo, ordenado por grupo y nombre", async () => {
     const rubros = await listarRubros(db);
     expect(rubros.map((r) => r.nombre)).toEqual([
       "Escenario",
@@ -53,37 +33,41 @@ describe("con DB", () => {
       "Vallas blancas",
       "Vallas freestanding",
     ]);
-    expect(rubros[0]).toMatchObject({ area: "Técnica, Escenario y Backline", areaId: 2, dias: 2 });
+    expect(rubros[0]).toMatchObject({ grupo: "Técnica, Escenario y Backline", grupoId: 2 });
   });
 
   it("crea y obtiene un rubro", async () => {
     const id = await crearRubro(db, datos());
-    expect(await obtenerRubro(db, id)).toMatchObject({
+    expect(await obtenerRubro(db, id)).toEqual({
       id,
       nombre: "Catering",
-      areaId: 3,
-      area: "Logística, Hospitalidad y RRHH",
-      dias: 1,
+      grupoId: 3,
+      grupo: "Logística, Hospitalidad y RRHH",
     });
     expect(await obtenerRubro(db, "no-existe")).toBeUndefined();
   });
 
-  it("nombre repetido o área inexistente vuelven como ErrorNegocio", async () => {
+  it("nombre repetido o grupo inexistente vuelven como ErrorNegocio", async () => {
     await expect(crearRubro(db, datos({ nombre: "Sonido" }))).rejects.toThrow("Ya existe un rubro con ese nombre");
-    await expect(crearRubro(db, datos({ areaId: "99" }))).rejects.toThrow("Área inválida");
+    await expect(crearRubro(db, datos({ grupoId: "99" }))).rejects.toThrow("Grupo inválido");
   });
 
   it("edita un rubro", async () => {
     const id = await crearRubro(db, datos());
-    await editarRubro(db, id, datos({ dias: "2", nombre: "Catering artistas" }));
-    expect(await obtenerRubro(db, id)).toMatchObject({ nombre: "Catering artistas", dias: 2 });
+    await editarRubro(db, id, datos({ nombre: "Catering artistas", grupoId: "1" }));
+    expect(await obtenerRubro(db, id)).toMatchObject({ nombre: "Catering artistas", grupoId: 1 });
     await expect(editarRubro(db, "no-existe", datos())).rejects.toThrow("El rubro no existe");
   });
 
-  it("borra un rubro", async () => {
+  it("borra un rubro que ningún evento usa", async () => {
     const id = await crearRubro(db, datos());
     await borrarRubro(db, id);
     expect(await obtenerRubro(db, id)).toBeUndefined();
     await expect(borrarRubro(db, id)).rejects.toThrow("El rubro no existe");
+  });
+
+  it("no borra un rubro usado en un evento (es historial)", async () => {
+    const [sonido] = (await listarRubros(db)).filter((r) => r.nombre === "Sonido");
+    await expect(borrarRubro(db, sonido.id)).rejects.toThrow("El rubro se usa en algún evento: no se puede borrar");
   });
 });
