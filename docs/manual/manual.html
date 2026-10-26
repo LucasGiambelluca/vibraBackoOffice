@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Manual de uso — Back office Vibra 2027</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap">
+<style>
+  :root {
+    --ink: #0A0A0A; --ink-2: #55555C; --ink-3: #8E8E93; --line: #E7E7E4; --bg: #F5F5F3; --soft: #F0F0EE;
+    --accent: #FF8A1F; --accent-soft: #FFF1E3; --accent-ink: #B04A00;
+    --ok: #1E7F4A; --ok-soft: #E6F4EC; --warn: #8A5A00; --warn-soft: #FFF4D6; --danger: #C4321F; --danger-soft: #FDECEA;
+  }
+  @page { size: A4; margin: 18mm 16mm 20mm; }
+  @page :first { margin: 0; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font: 400 10.5pt/1.55 Inter, system-ui, sans-serif; color: var(--ink); background: #fff; }
+  h1, h2, h3 { font-family: Montserrat, Inter, sans-serif; letter-spacing: -0.02em; line-height: 1.15; margin: 0; }
+  h2 { font-size: 22pt; font-weight: 800; margin-bottom: 4mm; }
+  h3 { font-size: 13pt; font-weight: 700; margin: 7mm 0 2.5mm; }
+  p { margin: 0 0 3mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 5mm; }
+  li { margin-bottom: 1.2mm; }
+  strong { font-weight: 600; }
+  .kicker { font: 700 8pt Inter; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 2mm; }
+  .lead { font-size: 12pt; color: var(--ink-2); margin-bottom: 6mm; }
+  section { break-before: page; }
+  figure { margin: 4mm 0 5mm; break-inside: avoid; }
+  figure img { display: block; width: 100%; border: 1px solid var(--line); border-radius: 3mm; }
+  section > figure:not(.full) { width: 82%; }
+  .phones figure { width: auto; }
+  figcaption { font-size: 8.5pt; color: var(--ink-3); margin-top: 2mm; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; align-items: start; }
+  .phones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; }
+  .phones img { border-radius: 5mm; }
+  .note { border-radius: 3mm; padding: 3.5mm 4.5mm; margin: 4mm 0; break-inside: avoid; font-size: 10pt; }
+  .note b { display: block; font-weight: 700; margin-bottom: 1mm; }
+  .note.info { background: var(--soft); color: var(--ink-2); }
+  .note.warn { background: var(--warn-soft); color: var(--warn); }
+  .note.tip { background: var(--accent-soft); color: var(--accent-ink); }
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0 5mm; font-size: 9.5pt; break-inside: avoid; }
+  th { text-align: left; font: 600 7.5pt Inter; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); padding: 2mm 2.5mm; border-bottom: 1px solid var(--line); }
+  td { padding: 2.5mm; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.c { text-align: center; }
+  .badge { display: inline-block; font: 600 8pt Inter; padding: 0.6mm 2.4mm; border-radius: 3mm; white-space: nowrap; }
+  .b-ok { background: var(--ok-soft); color: var(--ok); } .b-warn { background: var(--warn-soft); color: var(--warn); }
+  .b-muted { background: var(--soft); color: var(--ink-3); } .b-info { background: #EAF0FD; color: #2B5FE3; }
+  .b-accent { background: var(--accent-soft); color: var(--accent-ink); }
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps li { counter-increment: s; position: relative; padding-left: 9mm; margin-bottom: 2.5mm; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: -0.3mm; width: 6mm; height: 6mm; border-radius: 50%; background: var(--ink); color: #fff; font: 700 8pt/6mm Inter; text-align: center; }
+
+  /* Portada */
+  .cover { height: 297mm; background: var(--ink); color: #fff; padding: 24mm 22mm; display: flex; flex-direction: column; justify-content: space-between; }
+  .cover img.logo { width: 34mm; }
+  .cover .kicker { color: var(--accent); }
+  .cover h1 { font-size: 40pt; font-weight: 800; letter-spacing: -0.03em; line-height: 1.04; margin: 4mm 0 6mm; }
+  .cover .sub { font-size: 13pt; color: #FFFFFFAA; max-width: 130mm; }
+  .cover .meta { font-size: 9pt; color: #FFFFFF73; display: flex; justify-content: space-between; }
+  .cover .shot { width: 100%; border-radius: 3mm; opacity: 0.95; }
+
+  /* Índice */
+  .toc ol { list-style: none; padding: 0; margin: 0; columns: 1; }
+  .toc li { display: flex; gap: 4mm; padding: 3mm 0; border-bottom: 1px solid var(--line); font-size: 11pt; margin: 0; }
+  .toc li span:first-child { font: 700 11pt Montserrat; color: var(--accent-ink); width: 8mm; }
+  .toc li em { font-style: normal; color: var(--ink-3); margin-left: auto; font-size: 9.5pt; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <img class="logo" src="../diseno/assets/rsgroup-blanco.png" alt="RS Group">
+  <div>
+    <div class="kicker">Vibra Bolivia 2027</div>
+    <h1>Manual de uso del back office</h1>
+    <p class="sub">Cómo cargar y aprobar presupuestos, seguir las tareas del festival y no perderse ningún vencimiento.</p>
+  </div>
+  <img class="shot" src="img/01-tablero.png" alt="">
+  <div class="meta"><span>RS Group · Uso interno</span><span>Versión 1 · Octubre 2026</span></div>
+</div>
+
+<section class="toc" style="break-before: page">
+  <div class="kicker">Contenido</div>
+  <h2>Índice</h2>
+  <ol>
+    <li><span>1</span>Qué es el back office y quién lo usa <em>Roles y permisos</em></li>
+    <li><span>2</span>Entrar y moverse <em>Login, menú, celular</em></li>
+    <li><span>3</span>Tablero <em>El resumen del día</em></li>
+    <li><span>4</span>Presupuestos <em>Rubros, cotizaciones y aprobación</em></li>
+    <li><span>5</span>Proveedores <em>Contactos</em></li>
+    <li><span>6</span>Tareas <em>El to-do del evento</em></li>
+    <li><span>7</span>Recordatorios y notificaciones <em>Campanita y email</em></li>
+    <li><span>8</span>Administración <em>Usuarios, rubros, tipos de cambio</em></li>
+    <li><span>9</span>Mi cuenta <em>Avisos y contraseña</em></li>
+    <li><span>10</span>Preguntas frecuentes</li>
+  </ol>
+</section>
+
+<section>
+  <div class="kicker">1 · Introducción</div>
+  <h2>Qué es el back office</h2>
+  <p class="lead">Es la herramienta interna del equipo de producción de Vibra Bolivia 2027. Reúne en un solo lugar todos los presupuestos del evento y las tareas pendientes, ordenados por las seis áreas del festival.</p>
+  <h3>Para qué sirve</h3>
+  <ul>
+    <li><strong>Comparar cotizaciones</strong> de distintos proveedores para cada cosa que hay que contratar (sonido, pantallas, vallas…) y aprobar la elegida.</li>
+    <li><strong>Saber cuánto cuesta el evento</strong>: el total aprobado se calcula solo, en bolivianos, dólares y pesos argentinos.</li>
+    <li><strong>Seguir las tareas</strong> del festival con responsable y fecha límite, con recordatorios automáticos.</li>
+  </ul>
+  <h3>Las seis áreas</h3>
+  <p>Marketing y Audiovisual · Técnica, Escenario y Backline · Logística, Hospitalidad y RRHH · Infraestructura y Predio · Seguridad y Prevención · Gestión Presupuestaria.</p>
+  <h3>Roles y permisos</h3>
+  <p>Cada persona entra con su propio usuario. Hay dos roles:</p>
+  <table>
+    <thead><tr><th>Qué se puede hacer</th><th class="c">Editor</th><th class="c">Admin</th></tr></thead>
+    <tbody>
+      <tr><td>Ver todo el sistema</td><td class="c">✓</td><td class="c">✓</td></tr>
+      <tr><td>Cargar y editar cotizaciones, proveedores y tareas</td><td class="c">✓</td><td class="c">✓</td></tr>
+      <tr><td>Aprobar una cotización o revertir una aprobación</td><td class="c">—</td><td class="c">✓</td></tr>
+      <tr><td>Borrar registros</td><td class="c">—</td><td class="c">✓</td></tr>
+      <tr><td>Configuración: usuarios, rubros y tipos de cambio</td><td class="c">—</td><td class="c">✓</td></tr>
+    </tbody>
+  </table>
+  <div class="note info"><b>¿No ves la sección Administración?</b>Es normal si sos editor: el menú solo muestra lo que tu rol puede usar.</div>
+</section>
+
+<section>
+  <div class="kicker">2 · Primeros pasos</div>
+  <h2>Entrar y moverse</h2>
+  <h3>Entrar</h3>
+  <ol class="steps">
+    <li>Abrí la dirección del back office en el navegador (computadora o celular).</li>
+    <li>Escribí el email y la contraseña que te dio el admin.</li>
+    <li>Tocá <strong>Entrar</strong>. Si la contraseña es incorrecta, el sistema te lo avisa debajo del formulario.</li>
+  </ol>
+  <div class="note tip"><b>¿Olvidaste la contraseña?</b>No hay recuperación por email: pedile al admin que te asigne una nueva y después cambiala desde Mi cuenta.</div>
+  <figure><img src="img/00-login.png" alt="Pantalla de login"><figcaption>Pantalla de entrada en la computadora.</figcaption></figure>
+  <h3>El menú</h3>
+  <p>En la computadora, el menú está siempre a la izquierda: Tablero, Presupuestos, Proveedores y Tareas; los admins ven además <strong>Administración</strong>. Abajo de todo está tu nombre: tocalo para ir a <strong>Mi cuenta</strong>, o tocá el ícono de la flecha para <strong>salir</strong>.</p>
+  <p>Arriba a la derecha de cada pantalla está la <strong>campanita</strong> de notificaciones y la acción principal de esa pantalla (por ejemplo, <em>Nueva tarea</em>).</p>
+</section>
+
+<section>
+  <div class="kicker">2 · Primeros pasos</div>
+  <h2>En el celular</h2>
+  <p>El back office se ve completo desde el celular, sin instalar nada. El menú lateral se reemplaza por una <strong>barra de pestañas abajo</strong>, al alcance del pulgar:</p>
+  <ul>
+    <li><strong>Tablero</strong>, <strong>Presupuestos</strong> y <strong>Tareas</strong>: lo mismo que en la computadora.</li>
+    <li><strong>Más</strong>: Proveedores, Administración (solo admins), Mi cuenta y Salir.</li>
+  </ul>
+  <div class="phones">
+    <figure><img src="img/m2-tablero.png" alt=""><figcaption>Tablero.</figcaption></figure>
+    <figure><img src="img/m4-rubro.png" alt=""><figcaption>Comparar cotizaciones.</figcaption></figure>
+    <figure><img src="img/m8-mas.png" alt=""><figcaption>Menú “Más”.</figcaption></figure>
+  </div>
+  <div class="note tip"><b>Tip</b>Agregalo a la pantalla de inicio del celular (en Safari o Chrome: Compartir → Agregar a inicio) para abrirlo como una app.</div>
+</section>
+
+<section>
+  <div class="kicker">3 · Tablero</div>
+  <h2>El resumen del día</h2>
+  <p class="lead">Es la primera pantalla al entrar. Responde de un vistazo: cuánto llevamos aprobado y qué hay que resolver hoy.</p>
+  <figure><img src="img/01-tablero.png" alt=""><figcaption>Tablero en la computadora.</figcaption></figure>
+  <ul>
+    <li><strong>Total aprobado del evento</strong> (tarjeta negra): suma de todas las cotizaciones aprobadas, en BOB, USD y ARS. La barra naranja muestra cuántos rubros ya tienen cotización aprobada.</li>
+    <li><strong>Tareas vencidas</strong> y <strong>que vencen esta semana</strong>: los números a mirar primero.</li>
+    <li><strong>Avance por área</strong>: rubros aprobados sobre el total de cada área. La barra se pone verde cuando el área está completa.</li>
+    <li><strong>Próximas tareas</strong>: las vencidas (en rojo) y las de los próximos 7 días. Tocá una para abrirla.</li>
+  </ul>
+  <div class="note warn"><b>¿El total muestra un aviso en lugar de un número?</b>Falta el tipo de cambio de alguna moneda que se usó en una cotización aprobada. Un admin lo carga en Administración → Tipos de cambio.</div>
+</section>
+
+<section>
+  <div class="kicker">4 · Presupuestos</div>
+  <h2>Rubros y cotizaciones</h2>
+  <p class="lead">Un <strong>rubro</strong> es algo que hay que contratar (Sonido, Pantalla LED, Vallas…). Cada rubro recibe varias <strong>cotizaciones</strong> de distintos proveedores, y una sola se aprueba.</p>
+  <figure><img src="img/02-presupuestos.png" alt=""><figcaption>Lista de rubros con su estado de aprobación.</figcaption></figure>
+  <p>Arriba ves el total aprobado y cuántos rubros faltan aprobar. Usá las pestañas para filtrar por área. Cada fila muestra cuántas cotizaciones tiene el rubro y, si ya hay una aprobada, el proveedor y el monto; si no, la etiqueta <span class="badge b-warn">Sin aprobar</span>. Tocá un rubro para entrar a comparar.</p>
+  <h3>Cómo se calcula el total de una cotización</h3>
+  <table>
+    <thead><tr><th>Rubro de…</th><th>Total</th></tr></thead>
+    <tbody>
+      <tr><td>1 día</td><td>precio por día</td></tr>
+      <tr><td>2 días</td><td>precio por día × 2, menos el % de descuento por contratar los dos días. La diferencia se muestra como <strong>ahorro</strong>.</td></tr>
+    </tbody>
+  </table>
+  <p>Para poder comparar cotizaciones en monedas distintas, todas se pasan a bolivianos con los tipos de cambio cargados.</p>
+</section>
+
+<section>
+  <div class="kicker">4 · Presupuestos</div>
+  <h2>Comparar y aprobar</h2>
+  <figure><img src="img/03-rubro.png" alt=""><figcaption>Las cotizaciones de un rubro, lado a lado.</figcaption></figure>
+  <ul>
+    <li>Cada tarjeta muestra el proveedor, qué incluye, el total, su equivalente en bolivianos, el precio por día, el descuento, el ahorro y el PDF de la cotización si se adjuntó.</li>
+    <li>La <strong>más barata</strong> (en bolivianos) se destaca con borde naranja y la etiqueta <span class="badge b-accent">Más barata</span>.</li>
+    <li>Las <strong>descartadas</strong> aparecen aparte, tachadas.</li>
+  </ul>
+  <h3>Cargar una cotización</h3>
+  <ol class="steps">
+    <li>Dentro del rubro, tocá <strong>Nueva cotización</strong>.</li>
+    <li>Elegí el proveedor (si no existe, primero crealo en Proveedores), la moneda y escribí qué incluye.</li>
+    <li>Cargá el precio por día y, si el rubro es de 2 días, el % de descuento. Usá coma para los decimales.</li>
+    <li>Opcional: adjuntá el PDF que mandó el proveedor (hasta 10 MB).</li>
+    <li>Tocá <strong>Agregar cotización</strong>. Queda <span class="badge b-warn">Pendiente</span>.</li>
+  </ol>
+</section>
+
+<section>
+  <div class="kicker">4 · Presupuestos</div>
+  <h2>Aprobar</h2>
+  <h3>Solo los admins aprueban</h3>
+  <p>Tocá <strong>Aprobar</strong> en la cotización elegida. En ese mismo momento:</p>
+  <ul>
+    <li>Queda <span class="badge b-ok">Aprobada</span>, con tu nombre y la fecha.</li>
+    <li>Las demás cotizaciones del rubro pasan a <span class="badge b-muted">Descartada</span>.</li>
+    <li>El total del evento se actualiza.</li>
+  </ul>
+  <p>Para deshacerlo, tocá <strong>Revertir</strong>: vuelve a pendiente y las descartadas quedan como estaban. Si dos admins aprueban al mismo tiempo en el mismo rubro, el sistema acepta una y al otro le pide recargar la página.</p>
+</section>
+
+<section>
+  <div class="kicker">4 · Presupuestos</div>
+  <h2>Editar una cotización</h2>
+  <p>Cualquier usuario puede editar una cotización: proveedor, moneda, qué incluye, precio, descuento y PDF (reemplazarlo o quitarlo). El rubro no se cambia: si te equivocaste de rubro, cargala de nuevo en el correcto.</p>
+  <div class="note warn"><b>Si editás una cotización aprobada siendo editor</b>Vuelve a <strong>pendiente</strong> y un admin la tiene que aprobar de nuevo. Mientras tanto, deja de sumar al total del evento. El sistema te avisa antes de guardar.</div>
+  <figure><img src="img/04-editar-cotizacion.png" alt=""><figcaption>Lo que ve un editor al abrir una cotización aprobada.</figcaption></figure>
+  <p>Si la edita un admin, la cotización sigue aprobada: el cambio ya cuenta con su visto bueno.</p>
+</section>
+
+<section>
+  <div class="kicker">5 · Proveedores</div>
+  <h2>Proveedores</h2>
+  <p class="lead">La agenda de quienes cotizan para el evento.</p>
+  <figure><img src="img/05-proveedores.png" alt=""><figcaption>Lista de proveedores con buscador.</figcaption></figure>
+  <ul>
+    <li><strong>Nuevo proveedor</strong>: nombre (obligatorio), persona de contacto, teléfono, email y notas.</li>
+    <li>Usá el <strong>buscador</strong> para encontrar por nombre o por contacto.</li>
+    <li>Tocá un proveedor para editar sus datos y ver todas sus cotizaciones en cualquier rubro.</li>
+  </ul>
+  <div class="note info"><b>¿No se puede borrar un proveedor?</b>Un proveedor con cotizaciones no se puede borrar, para no perder historial. Primero hay que borrar sus cotizaciones (solo admin).</div>
+</section>
+
+<section>
+  <div class="kicker">6 · Tareas</div>
+  <h2>El to-do del evento</h2>
+  <figure><img src="img/06-tareas.png" alt=""><figcaption>Lista de tareas con filtros.</figcaption></figure>
+  <h3>Crear una tarea</h3>
+  <ol class="steps">
+    <li>Tocá <strong>Nueva tarea</strong>.</li>
+    <li>Escribí qué hay que hacer y elegí el área.</li>
+    <li>Elegí el <strong>responsable</strong>. Si no tiene, los avisos les llegan a todos los admins.</li>
+    <li>Opcional: poné una <strong>fecha límite</strong> (activa los recordatorios automáticos) y notas.</li>
+  </ol>
+  <h3>Estados</h3>
+  <p><span class="badge b-warn">Pendiente</span> → <span class="badge b-info">En curso</span> → <span class="badge b-ok">Hecha</span>. Cambiá el estado con el botón de cada fila (<em>Empezar</em>, <em>Marcar hecha</em>, <em>Reabrir</em>) o desde el detalle. Una tarea con fecha límite pasada que no está hecha se marca en rojo como <strong>vencida</strong>.</p>
+  <h3>Filtrar</h3>
+  <p>Arriba de la lista: por estado (pestañas), por área y por responsable.</p>
+</section>
+
+<section>
+  <div class="kicker">6 · Tareas</div>
+  <h2>Detalle de una tarea</h2>
+  <figure><img src="img/07-tarea.png" alt=""><figcaption>Datos de la tarea a la izquierda, recordatorios a la derecha.</figcaption></figure>
+  <ul>
+    <li>Editá cualquier dato y tocá <strong>Guardar cambios</strong>.</li>
+    <li>Si cambiás la fecha límite, los recordatorios automáticos se recalculan solos.</li>
+    <li>Al marcarla <strong>hecha</strong> (o borrarla) se cancelan todos sus recordatorios pendientes.</li>
+    <li><strong>Borrar</strong> la tarea es solo para admins y pide confirmación.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="kicker">7 · Recordatorios</div>
+  <h2>Recordatorios y notificaciones</h2>
+  <p class="lead">El sistema avisa solo cuando se acerca o se pasa una fecha límite. Todos los horarios son de La Paz.</p>
+  <h3>Recordatorios automáticos</h3>
+  <table>
+    <thead><tr><th>Cuándo</th><th>Aviso</th></tr></thead>
+    <tbody>
+      <tr><td>3 días antes de la fecha límite, 09:00</td><td>“<em>Tarea</em>” vence en 3 días (fecha)</td></tr>
+      <tr><td>El día de la fecha límite, 09:00</td><td>“<em>Tarea</em>” vence hoy</td></tr>
+      <tr><td>Cada día a las 09:00 mientras siga vencida</td><td>“<em>Tarea</em>” está vencida desde el (fecha), hasta que se marque hecha</td></tr>
+    </tbody>
+  </table>
+  <h3>Recordatorios manuales</h3>
+  <p>Quien creó la tarea (o un admin) puede agregar uno en una fecha y hora puntual desde el detalle de la tarea, y cancelarlo mientras no se haya enviado.</p>
+</section>
+
+<section>
+  <div class="kicker">7 · Recordatorios</div>
+  <h2>La campanita</h2>
+  <h3>A quién le llegan</h3>
+  <p>Al responsable de la tarea. Si no tiene responsable, a todos los admins. Llegan siempre a la <strong>campanita</strong> y, si la persona lo tiene activado en Mi cuenta, también por <strong>email</strong>.</p>
+  <figure><img src="img/08-notificaciones.png" alt=""><figcaption>La campanita abierta: las no leídas se destacan en naranja.</figcaption></figure>
+  <ul>
+    <li>El número sobre la campanita indica cuántas notificaciones no leíste.</li>
+    <li>Tocá una notificación para abrir la tarea; queda marcada como leída.</li>
+    <li><strong>Marcar todas como leídas</strong> limpia el contador.</li>
+  </ul>
+  <div class="note info"><b>Si un email no sale</b>El sistema lo reintenta varias veces. Si igual no se puede enviar, los admins reciben un aviso en la campanita para revisar el email del destinatario.</div>
+</section>
+
+<section>
+  <div class="kicker">8 · Administración</div>
+  <h2>Usuarios</h2>
+  <p class="lead">Solo admins. Quién entra al sistema y qué puede hacer.</p>
+  <figure><img src="img/09-usuarios.png" alt=""><figcaption>Usuarios y alta de un usuario nuevo.</figcaption></figure>
+  <ol class="steps">
+    <li>Completá nombre, email, contraseña inicial (mínimo 8 caracteres) y rol.</li>
+    <li>Tocá <strong>Crear usuario</strong>.</li>
+    <li>Pasale el email y la contraseña a la persona por un canal seguro y pedile que la cambie desde Mi cuenta.</li>
+  </ol>
+  <ul>
+    <li>El rol de cada usuario se cambia con el selector <em>Admin / Editor</em> de su fila.</li>
+    <li>El ícono de papelera borra el usuario (pide confirmación). No podés borrar tu propio usuario ni cambiar tu propio rol: lo hace otro admin.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="kicker">8 · Administración</div>
+  <h2>Rubros</h2>
+  <figure><img src="img/10-rubros.png" alt=""><figcaption>Rubros agrupados por área.</figcaption></figure>
+  <p>Creá un rubro con nombre, área y cantidad de días a contratar (1 o 2). Los días definen cómo se calcula el total de sus cotizaciones. Un rubro con cotizaciones no se puede borrar.</p>
+</section>
+
+<section>
+  <div class="kicker">8 · Administración</div>
+  <h2>Tipos de cambio</h2>
+  <figure><img src="img/11-tipos-cambio.png" alt=""><figcaption>Cuántos bolivianos vale cada moneda.</figcaption></figure>
+  <p>Cargá cuántos bolivianos vale 1 dólar y 1 peso argentino. Se guarda quién lo actualizó y cuándo. Al cambiar un valor, todos los totales en BOB se recalculan.</p>
+</section>
+
+<section>
+  <div class="kicker">9 · Mi cuenta</div>
+  <h2>Mi cuenta</h2>
+  <figure><img src="img/12-cuenta.png" alt=""><figcaption>Avisos por email y cambio de contraseña.</figcaption></figure>
+  <ul>
+    <li><strong>Recibir los recordatorios por email</strong>: activado por defecto. Si lo apagás, los avisos te siguen llegando a la campanita.</li>
+    <li><strong>Contraseña</strong>: escribí la actual y la nueva dos veces (mínimo 8 caracteres). Al cambiarla se cierran tus sesiones en otros dispositivos.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="kicker">10 · Ayuda</div>
+  <h2>Preguntas frecuentes</h2>
+  <h3>Edité una cotización y desapareció del total.</h3>
+  <p>Estaba aprobada y la editaste como editor: volvió a pendiente. Pedile a un admin que la apruebe de nuevo.</p>
+  <h3>No me aparece el botón “Aprobar”.</h3>
+  <p>Solo los admins aprueban. Si tenés que aprobar, pedile a un admin que te cambie el rol.</p>
+  <h3>No me llegan los emails de recordatorio.</h3>
+  <p>Revisá en Mi cuenta que esté activado “Recibir los recordatorios por email” y mirá la carpeta de spam. Igual, todo aviso queda en la campanita.</p>
+  <h3>Una tarea no tiene recordatorios.</h3>
+  <p>Los automáticos se crean solo si la tarea tiene fecha límite. Poné una o agregá un recordatorio manual.</p>
+  <h3>Me equivoqué de rubro al cargar una cotización.</h3>
+  <p>El rubro no se puede cambiar. Cargala de nuevo en el rubro correcto y pedile a un admin que borre la equivocada.</p>
+  <h3>El total del evento dice que falta un tipo de cambio.</h3>
+  <p>Hay una cotización aprobada en USD o ARS y ese tipo de cambio no está cargado. Un admin lo carga en Administración → Tipos de cambio.</p>
+  <div class="note tip"><b>¿Algo no funciona como dice este manual?</b>Escribile al admin del sistema con una captura de pantalla y qué estabas haciendo.</div>
+</section>
+
+</body>
+</html>
