@@ -1,29 +1,27 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, numeric, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
+import { eventoRubro } from "./eventos-schema";
 
 // En los CHECK y el índice parcial se usan nombres de columna crudos: Postgres no
 // acepta columnas calificadas con la tabla ahí y drizzle-kit las calificaría.
 
-/** Las 6 áreas del evento. Fijas: se cargan en la migración 0002. */
-export const area = pgTable("area", {
-  id: integer("id").primaryKey(),
+/** Grupos de rubros (antes, las 6 áreas fijas). Los arma el admin. */
+export const grupo = pgTable("grupo", {
+  id: integer("id").primaryKey().generatedByDefaultAsIdentity({ startWith: 7 }),
   nombre: text("nombre").notNull().unique(),
+  orden: integer("orden").notNull().default(0),
 });
 
-export const rubro = pgTable(
-  "rubro",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    nombre: text("nombre").notNull().unique(),
-    areaId: integer("area_id")
-      .notNull()
-      .references(() => area.id),
-    dias: integer("dias").notNull().default(1),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-  },
-  () => [check("rubro_dias_check", sql`dias in (1, 2)`)],
-);
+/** Catálogo de rubros de la productora: cada evento elige cuáles usa (ver evento_rubro). */
+export const rubro = pgTable("rubro", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  nombre: text("nombre").notNull().unique(),
+  grupoId: integer("grupo_id")
+    .notNull()
+    .references(() => grupo.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
 
 export const proveedor = pgTable("proveedor", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -39,9 +37,10 @@ export const cotizacion = pgTable(
   "cotizacion",
   {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    rubroId: text("rubro_id")
+    /** El rubro dentro de un evento: así cada evento tiene sus cotizaciones. */
+    eventoRubroId: text("evento_rubro_id")
       .notNull()
-      .references(() => rubro.id, { onDelete: "restrict" }),
+      .references(() => eventoRubro.id, { onDelete: "restrict" }),
     proveedorId: text("proveedor_id")
       .notNull()
       .references(() => proveedor.id, { onDelete: "restrict" }),
@@ -67,27 +66,9 @@ export const cotizacion = pgTable(
     check("cotizacion_estado_check", sql`estado in ('pendiente', 'aprobada', 'descartada')`),
     check("cotizacion_precio_check", sql`precio_dia > 0`),
     check("cotizacion_descuento_check", sql`descuento_2_dias between 0 and 100`),
-    // Regla de negocio: como máximo una cotización aprobada por rubro.
-    uniqueIndex("cotizacion_una_aprobada_por_rubro").on(t.rubroId).where(sql`estado = 'aprobada'`),
-    index("cotizacion_rubro_idx").on(t.rubroId),
+    // Regla de negocio: como máximo una cotización aprobada por rubro de cada evento.
+    uniqueIndex("cotizacion_una_aprobada_por_rubro").on(t.eventoRubroId).where(sql`estado = 'aprobada'`),
+    index("cotizacion_evento_rubro_idx").on(t.eventoRubroId),
     index("cotizacion_proveedor_idx").on(t.proveedorId),
-  ],
-);
-
-/** Cuántos BOB vale 1 unidad de la moneda. BOB no se guarda: siempre vale 1. */
-export const tipoCambio = pgTable(
-  "tipo_cambio",
-  {
-    moneda: text("moneda").primaryKey(),
-    valorBob: numeric("valor_bob", { precision: 14, scale: 6 }).notNull(),
-    actualizadoPor: text("actualizado_por").references(() => user.id, { onDelete: "set null" }),
-    updatedAt: timestamp("updated_at")
-      .notNull()
-      .defaultNow()
-      .$onUpdate(() => new Date()),
-  },
-  () => [
-    check("tipo_cambio_moneda_check", sql`moneda in ('USD', 'ARS')`),
-    check("tipo_cambio_valor_check", sql`valor_bob > 0`),
   ],
 );

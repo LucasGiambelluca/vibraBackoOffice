@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
-import { area } from "./presupuestos-schema";
+import { evento } from "./eventos-schema";
+import { grupo } from "./presupuestos-schema";
 
 // En los CHECK y los índices parciales se usan nombres de columna crudos (ver presupuestos-schema.ts).
 
@@ -10,9 +11,12 @@ export const tarea = pgTable(
   {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     titulo: text("titulo").notNull(),
-    areaId: integer("area_id")
+    eventoId: text("evento_id")
       .notNull()
-      .references(() => area.id),
+      .references(() => evento.id, { onDelete: "restrict" }),
+    grupoId: integer("grupo_id")
+      .notNull()
+      .references(() => grupo.id),
     responsableId: text("responsable_id").references(() => user.id, { onDelete: "set null" }),
     /** Día de vencimiento en La Paz, "YYYY-MM-DD". */
     fechaLimite: date("fecha_limite", { mode: "string" }),
@@ -27,7 +31,8 @@ export const tarea = pgTable(
   },
   (t) => [
     check("tarea_estado_check", sql`estado in ('pendiente', 'en_curso', 'hecha')`),
-    index("tarea_area_idx").on(t.areaId),
+    index("tarea_evento_idx").on(t.eventoId),
+    index("tarea_grupo_idx").on(t.grupoId),
     index("tarea_responsable_idx").on(t.responsableId),
   ],
 );

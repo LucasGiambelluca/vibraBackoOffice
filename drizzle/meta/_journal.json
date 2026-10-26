@@ -50,6 +50,13 @@
       "when": 1793013645852,
       "tag": "0006_short_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793040607723,
+      "tag": "0007_multi_evento",
+      "breakpoints": true
     }
   ]
 }
