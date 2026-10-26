@@ -20,6 +20,10 @@ const DIA_10_NUEVE = new Date("2027-03-10T13:00:00Z");
 const DIA_3_NUEVE = new Date("2027-03-03T13:00:00Z");
 const ONCE_MINUTOS = 11 * 60_000;
 const notificaciones = (db: Db) => db.select().from(notificacion);
+const avisosA = (db: Db, usuarioId: string) =>
+  db.select().from(notificacion).where(eq(notificacion.usuarioId, usuarioId));
+// La notificación del recordatorio (el responsable de la tarea es el editor).
+const delEditor = async (db: Db) => (await avisosA(db, editor.id))[0];
 
 let db: Db;
 let admin: Actor;
@@ -181,7 +185,20 @@ describe("enviarEmailsPendientes", () => {
       expect((await notificaciones(db))[0]).toMatchObject({ emailEstado: "pendiente", intentosEmail: i });
     }
     await enviarEmailsPendientes(db, fallar, "https://vibra.test", corrida(MAX_INTENTOS_EMAIL));
-    expect((await notificaciones(db))[0]).toMatchObject({ emailEstado: "fallido", intentosEmail: MAX_INTENTOS_EMAIL });
+    expect(await delEditor(db)).toMatchObject({ emailEstado: "fallido", intentosEmail: MAX_INTENTOS_EMAIL });
+  });
+
+  it("cuando un email queda fallido, avisa a los admins en la campanita, sin email", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fallar = async () => {
+      throw new Error("SMTP caído");
+    };
+    for (let i = 1; i <= MAX_INTENTOS_EMAIL; i++) {
+      await enviarEmailsPendientes(db, fallar, "https://vibra.test", new Date(DIA_3_NUEVE.getTime() + i * ONCE_MINUTOS));
+    }
+    expect(await avisosA(db, admin.id)).toMatchObject([
+      { mensaje: 'No se pudo mandar el email a editor@vibra.bo: "Vallas" vence hoy', emailEstado: "omitido" },
+    ]);
   });
 
   it("un email que falló no se reintenta antes de 10 minutos", async () => {
@@ -216,6 +233,7 @@ describe("enviarEmailsPendientes", () => {
     const enviar = vi.fn(async () => {});
     await enviarEmailsPendientes(db, enviar, "https://vibra.test", new Date(DIA_3_NUEVE.getTime() + 10 * ONCE_MINUTOS));
     expect(enviar).not.toHaveBeenCalled();
-    expect((await notificaciones(db))[0]).toMatchObject({ emailEstado: "fallido", intentosEmail: MAX_INTENTOS_EMAIL });
+    expect(await delEditor(db)).toMatchObject({ emailEstado: "fallido", intentosEmail: MAX_INTENTOS_EMAIL });
+    expect(await avisosA(db, admin.id)).toHaveLength(1);
   });
 });

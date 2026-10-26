@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import { notificacion, recordatorio, tarea, user } from "@/db/schema";
 import type { EnviarEmail } from "@/lib/email";
-import { pendiente } from "@/lib/recordatorios";
+import { pendiente, type Tx } from "@/lib/recordatorios";
 import { hoyEnLaPaz, mensajeRecordatorio, siguienteNueve } from "@/lib/reminders";
 
 // Lógica del worker (src/worker/ciclo.ts). Testeable con una DB de prueba.
@@ -128,9 +128,18 @@ export async function reclamarEmails(db: Db, ahora = new Date()): Promise<EmailR
       .limit(LOTE)
       .for("update", { of: notificacion, skipLocked: true });
 
-    const agotadas = filas.filter((n) => n.intentos >= MAX_INTENTOS_EMAIL).map((n) => n.id);
+    const agotadas = filas.filter((n) => n.intentos >= MAX_INTENTOS_EMAIL);
     if (agotadas.length > 0) {
-      await tx.update(notificacion).set({ emailEstado: "fallido" }).where(inArray(notificacion.id, agotadas));
+      await tx
+        .update(notificacion)
+        .set({ emailEstado: "fallido" })
+        .where(
+          inArray(
+            notificacion.id,
+            agotadas.map((n) => n.id),
+          ),
+        );
+      await avisarEmailsFallidos(tx, agotadas);
     }
     const reclamadas = filas.filter((n) => n.intentos < MAX_INTENTOS_EMAIL);
     if (reclamadas.length > 0) {
@@ -176,5 +185,25 @@ Ver la tarea: ${urlBase}/tareas/${n.tareaId}`,
       estado = n.intentos >= MAX_INTENTOS_EMAIL ? "fallido" : "pendiente";
     }
     await db.update(notificacion).set({ emailEstado: estado }).where(eq(notificacion.id, n.id));
+    if (estado === "fallido") await avisarEmailsFallidos(db, [n]);
   }
+}
+
+/**
+ * Avisa a los admins en la campanita de los emails que no salieron. Sin email: si se
+ * agotaron los reintentos, lo más probable es que el SMTP sea lo que está fallando.
+ */
+async function avisarEmailsFallidos(db: Db | Tx, fallidos: Pick<EmailReclamado, "tareaId" | "mensaje" | "email">[]) {
+  const admins = await db.select({ id: user.id }).from(user).where(eq(user.role, "admin"));
+  if (admins.length === 0) return;
+  await db.insert(notificacion).values(
+    fallidos.flatMap((n) =>
+      admins.map((a) => ({
+        usuarioId: a.id,
+        tareaId: n.tareaId,
+        mensaje: `No se pudo mandar el email a ${n.email}: ${n.mensaje}`,
+        emailEstado: "omitido" as const,
+      })),
+    ),
+  );
 }
