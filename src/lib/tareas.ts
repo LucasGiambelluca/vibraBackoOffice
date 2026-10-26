@@ -5,19 +5,10 @@ import { area, tarea, user } from "@/db/schema";
 import { conRestricciones, ErrorNegocio } from "@/lib/acciones";
 import { cancelarPendientes, regenerarAutomaticos } from "@/lib/recordatorios";
 import { hoyEnLaPaz, sumarDias } from "@/lib/reminders";
-import { textoOpcional } from "@/lib/validacion";
+import { fechaOpcional, textoOpcional } from "@/lib/validacion";
 
 export const ESTADOS_TAREA = ["pendiente", "en_curso", "hecha"] as const;
 export type EstadoTarea = (typeof ESTADOS_TAREA)[number];
-
-const fechaSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida")
-  // Rechaza fechas que no existen (2027-02-30): son inválidas o al normalizarlas cambian.
-  .refine((v) => {
-    const d = new Date(`${v}T00:00:00Z`);
-    return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
-  }, "Fecha inválida");
 
 export const tareaSchema = z.object({
   titulo: z.string("Falta el título").trim().min(2, "El título es muy corto").max(200, "El título es muy largo"),
@@ -26,11 +17,7 @@ export const tareaSchema = z.object({
     .string()
     .optional()
     .transform((v) => v || null),
-  fechaLimite: z
-    .string()
-    .optional()
-    .transform((v) => v || null)
-    .pipe(fechaSchema.nullable()),
+  fechaLimite: fechaOpcional(),
   notas: textoOpcional(2000),
 });
 

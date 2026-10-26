@@ -31,3 +31,21 @@ export function decimal(
         .refine((valor) => valor.split(".")[0].replace(/^0+/, "").length <= enteros, demasiadoGrande),
     );
 }
+
+/** Fecha "YYYY-MM-DD" que existe (rechaza 2027-02-30: al normalizarla cambia). */
+export const fechaSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida")
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+  }, "Fecha inválida");
+
+/** Fecha opcional de formulario: vacía o ausente se guarda como null. */
+export function fechaOpcional() {
+  return z
+    .string()
+    .optional()
+    .transform((v) => v || null)
+    .pipe(fechaSchema.nullable());
+}

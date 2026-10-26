@@ -1,11 +1,12 @@
 import { and, asc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import { cotizacion, proveedor, rubro, user } from "@/db/schema";
+import { cotizacion, evento, eventoRubro, eventoTipoCambio, proveedor, rubro, user } from "@/db/schema";
 import { conRestricciones, ErrorNegocio } from "@/lib/acciones";
 import { borrarPdf } from "@/lib/adjuntos";
-import { aBob, ahorroCotizacion, MONEDAS, totalCotizacion, type Moneda } from "@/lib/money";
-import { obtenerTiposCambio } from "@/lib/tipos-cambio";
+import { asegurarEventoAbierto } from "@/lib/eventos";
+import { aArs, ahorroCotizacion, MONEDAS, totalCotizacion, type Moneda, type TiposCambio } from "@/lib/money";
+import type { Tx } from "@/lib/recordatorios";
 import { decimal } from "@/lib/validacion";
 
 export const ESTADOS = ["pendiente", "aprobada", "descartada"] as const;
@@ -13,7 +14,7 @@ export type Estado = (typeof ESTADOS)[number];
 
 const DESCUENTO_FUERA_DE_RANGO = "El descuento debe estar entre 0 y 100";
 
-/** Campos editables. El rubro se elige al crear y no cambia. */
+/** Campos editables. El rubro del evento se elige al crear y no cambia. */
 export const cotizacionSchema = z.object({
   proveedorId: z.string("Elegí un proveedor").min(1, "Elegí un proveedor"),
   descripcion: z
@@ -39,11 +40,32 @@ export const cotizacionSchema = z.object({
 });
 
 export const nuevaCotizacionSchema = cotizacionSchema.extend({
-  rubroId: z.string("Rubro inválido").min(1, "Rubro inválido"),
+  eventoRubroId: z.string("Rubro inválido").min(1, "Rubro inválido"),
 });
 
 export type DatosCotizacion = z.infer<typeof cotizacionSchema>;
 export type NuevaCotizacion = z.infer<typeof nuevaCotizacionSchema>;
+
+/** Falla si el rubro del evento no existe o su evento está cerrado. */
+async function asegurarRubroAbierto(tx: Tx, eventoRubroId: string): Promise<void> {
+  const [fila] = await tx
+    .select({ eventoId: eventoRubro.eventoId })
+    .from(eventoRubro)
+    .where(eq(eventoRubro.id, eventoRubroId));
+  if (!fila) throw new ErrorNegocio("Rubro inválido");
+  await asegurarEventoAbierto(tx, fila.eventoId);
+}
+
+/** La cotización con su rubro del evento; falla si no existe o el evento está cerrado. */
+async function cotizacionAbierta(tx: Tx, id: string) {
+  const [fila] = await tx
+    .select({ eventoRubroId: cotizacion.eventoRubroId, adjunto: cotizacion.adjunto })
+    .from(cotizacion)
+    .where(eq(cotizacion.id, id));
+  if (!fila) throw new ErrorNegocio("La cotización no existe");
+  await asegurarRubroAbierto(tx, fila.eventoRubroId);
+  return fila;
+}
 
 export async function crearCotizacion(
   db: Db,
@@ -51,11 +73,18 @@ export async function crearCotizacion(
   creadoPor: string | null,
   adjunto: string | null = null,
 ): Promise<string> {
-  const [fila] = await conRestricciones(
-    () => db.insert(cotizacion).values({ ...datos, creadoPor, adjunto }).returning({ id: cotizacion.id }),
+  return conRestricciones(
+    () =>
+      db.transaction(async (tx) => {
+        await asegurarRubroAbierto(tx, datos.eventoRubroId);
+        const [fila] = await tx
+          .insert(cotizacion)
+          .values({ ...datos, creadoPor, adjunto })
+          .returning({ id: cotizacion.id });
+        return fila.id;
+      }),
     { fk: "Rubro o proveedor inválido" },
   );
-  return fila.id;
 }
 
 const SIN_APROBACION = { aprobadaPor: null, aprobadaAt: null };
@@ -73,9 +102,6 @@ export async function editarCotizacion(
   adjunto?: string | null,
   conservarAprobacion = false,
 ): Promise<void> {
-  const [actual] = await db.select({ adjunto: cotizacion.adjunto }).from(cotizacion).where(eq(cotizacion.id, id));
-  if (!actual) throw new ErrorNegocio("La cotización no existe");
-
   const cambios = {
     ...datos,
     ...(adjunto === undefined ? {} : { adjunto }),
@@ -88,36 +114,48 @@ export async function editarCotizacion(
           aprobadaAt: sql`case when ${cotizacion.estado} = 'aprobada' then null else ${cotizacion.aprobadaAt} end`,
         }),
   };
-  const filas = await conRestricciones(
-    () => db.update(cotizacion).set(cambios).where(eq(cotizacion.id, id)).returning({ id: cotizacion.id }),
+  const anterior = await conRestricciones(
+    () =>
+      db.transaction(async (tx) => {
+        const actual = await cotizacionAbierta(tx, id);
+        const filas = await tx
+          .update(cotizacion)
+          .set(cambios)
+          .where(eq(cotizacion.id, id))
+          .returning({ id: cotizacion.id });
+        // Se pudo borrar entre la lectura y la actualización.
+        if (filas.length === 0) throw new ErrorNegocio("La cotización no existe");
+        return actual.adjunto;
+      }),
     { fk: "Proveedor inválido" },
   );
-  // Se pudo borrar entre la lectura y la actualización.
-  if (filas.length === 0) throw new ErrorNegocio("La cotización no existe");
-  if (adjunto !== undefined && actual.adjunto !== adjunto) await borrarPdf(actual.adjunto);
+  if (adjunto !== undefined && anterior !== adjunto) await borrarPdf(anterior);
 }
 
 /**
- * Aprueba y pasa a descartada el resto de las cotizaciones del rubro, en una transacción.
- * Se bloquea la fila del rubro para que dos aprobaciones del mismo rubro se hagan de a una.
+ * Aprueba y pasa a descartada el resto de las cotizaciones del rubro del evento, en una
+ * transacción. Se bloquea la fila del rubro del evento para que dos aprobaciones del mismo
+ * rubro se hagan de a una.
  */
 export async function aprobarCotizacion(db: Db, id: string, aprobadaPor: string | null = null): Promise<void> {
   await conRestricciones(
     () =>
       db.transaction(async (tx) => {
-        const buscar = () => tx.select({ rubroId: cotizacion.rubroId }).from(cotizacion).where(eq(cotizacion.id, id));
-        const [previa] = await buscar();
-        if (!previa) throw new ErrorNegocio("La cotización no existe");
-        await tx.select({ id: rubro.id }).from(rubro).where(eq(rubro.id, previa.rubroId)).for("update");
+        const previa = await cotizacionAbierta(tx, id);
+        await tx
+          .select({ id: eventoRubro.id })
+          .from(eventoRubro)
+          .where(eq(eventoRubro.id, previa.eventoRubroId))
+          .for("update");
         // Pudo borrarse mientras se esperaba el bloqueo (el rubro no cambia: no es editable).
-        const [fila] = await buscar();
+        const [fila] = await tx.select({ id: cotizacion.id }).from(cotizacion).where(eq(cotizacion.id, id));
         if (!fila) throw new ErrorNegocio("La cotización no existe");
 
         // Primero se descartan las demás para no chocar con el índice de una aprobada por rubro.
         await tx
           .update(cotizacion)
           .set({ estado: "descartada", ...SIN_APROBACION })
-          .where(and(eq(cotizacion.rubroId, fila.rubroId), ne(cotizacion.id, id)));
+          .where(and(eq(cotizacion.eventoRubroId, previa.eventoRubroId), ne(cotizacion.id, id)));
         await tx
           .update(cotizacion)
           .set({ estado: "aprobada", aprobadaPor, aprobadaAt: new Date() })
@@ -128,18 +166,25 @@ export async function aprobarCotizacion(db: Db, id: string, aprobadaPor: string 
 }
 
 export async function revertirAprobacion(db: Db, id: string): Promise<void> {
-  const filas = await db
-    .update(cotizacion)
-    .set({ estado: "pendiente", ...SIN_APROBACION })
-    .where(and(eq(cotizacion.id, id), eq(cotizacion.estado, "aprobada")))
-    .returning({ id: cotizacion.id });
-  if (filas.length === 0) throw new ErrorNegocio("La cotización no está aprobada");
+  await db.transaction(async (tx) => {
+    await cotizacionAbierta(tx, id);
+    const filas = await tx
+      .update(cotizacion)
+      .set({ estado: "pendiente", ...SIN_APROBACION })
+      .where(and(eq(cotizacion.id, id), eq(cotizacion.estado, "aprobada")))
+      .returning({ id: cotizacion.id });
+    if (filas.length === 0) throw new ErrorNegocio("La cotización no está aprobada");
+  });
 }
 
 export async function borrarCotizacion(db: Db, id: string): Promise<void> {
-  const [fila] = await db.delete(cotizacion).where(eq(cotizacion.id, id)).returning({ adjunto: cotizacion.adjunto });
-  if (!fila) throw new ErrorNegocio("La cotización no existe");
-  await borrarPdf(fila.adjunto);
+  const adjunto = await db.transaction(async (tx) => {
+    await cotizacionAbierta(tx, id);
+    const [fila] = await tx.delete(cotizacion).where(eq(cotizacion.id, id)).returning({ adjunto: cotizacion.adjunto });
+    if (!fila) throw new ErrorNegocio("La cotización no existe");
+    return fila.adjunto;
+  });
+  await borrarPdf(adjunto);
 }
 
 /** Fila cruda, para precargar el formulario de edición. */
@@ -148,17 +193,32 @@ export async function obtenerCotizacion(db: Db, id: string) {
   return fila;
 }
 
-export type FiltroCotizaciones = { rubroId?: string; proveedorId?: string; estado?: Estado };
+export type FiltroCotizaciones = {
+  eventoId?: string;
+  eventoRubroId?: string;
+  proveedorId?: string;
+  estado?: Estado;
+};
 
-/** Cotizaciones con rubro, proveedor y totales calculados (en su moneda y en BOB). */
+/** Tipos de cambio de cada evento (son pocas filas: dos por evento). */
+export async function tiposPorEvento(db: Db): Promise<Map<string, TiposCambio>> {
+  const filas = await db.select().from(eventoTipoCambio);
+  const tipos = new Map<string, TiposCambio>();
+  for (const f of filas) tipos.set(f.eventoId, { ...tipos.get(f.eventoId), [f.moneda]: Number(f.valorArs) });
+  return tipos;
+}
+
+/** Cotizaciones con evento, rubro, proveedor y totales (en su moneda y en ARS con los tipos de su evento). */
 export async function listarCotizaciones(db: Db, filtro: FiltroCotizaciones = {}) {
   const [filas, tipos] = await Promise.all([
     db
       .select({
         id: cotizacion.id,
-        rubroId: cotizacion.rubroId,
+        eventoRubroId: cotizacion.eventoRubroId,
+        eventoId: eventoRubro.eventoId,
+        evento: evento.nombre,
         rubro: rubro.nombre,
-        dias: rubro.dias,
+        dias: eventoRubro.dias,
         proveedorId: cotizacion.proveedorId,
         proveedor: proveedor.nombre,
         descripcion: cotizacion.descripcion,
@@ -172,18 +232,21 @@ export async function listarCotizaciones(db: Db, filtro: FiltroCotizaciones = {}
         createdAt: cotizacion.createdAt,
       })
       .from(cotizacion)
-      .innerJoin(rubro, eq(cotizacion.rubroId, rubro.id))
+      .innerJoin(eventoRubro, eq(cotizacion.eventoRubroId, eventoRubro.id))
+      .innerJoin(evento, eq(eventoRubro.eventoId, evento.id))
+      .innerJoin(rubro, eq(eventoRubro.rubroId, rubro.id))
       .innerJoin(proveedor, eq(cotizacion.proveedorId, proveedor.id))
       .leftJoin(user, eq(cotizacion.aprobadaPor, user.id))
       .where(
         and(
-          filtro.rubroId ? eq(cotizacion.rubroId, filtro.rubroId) : undefined,
+          filtro.eventoId ? eq(eventoRubro.eventoId, filtro.eventoId) : undefined,
+          filtro.eventoRubroId ? eq(cotizacion.eventoRubroId, filtro.eventoRubroId) : undefined,
           filtro.proveedorId ? eq(cotizacion.proveedorId, filtro.proveedorId) : undefined,
           filtro.estado ? eq(cotizacion.estado, filtro.estado) : undefined,
         ),
       )
       .orderBy(asc(cotizacion.createdAt)),
-    obtenerTiposCambio(db),
+    tiposPorEvento(db),
   ]);
 
   return filas.map((fila) => {
@@ -197,19 +260,19 @@ export async function listarCotizaciones(db: Db, filtro: FiltroCotizaciones = {}
       estado: fila.estado as Estado,
       total,
       ahorro: ahorroCotizacion(precio),
-      totalBob: aBob(total, moneda, tipos),
+      totalArs: aArs(total, moneda, tipos.get(fila.eventoId) ?? {}),
     };
   });
 }
 
 export type CotizacionListada = Awaited<ReturnType<typeof listarCotizaciones>>[number];
 
-/** La más barata en BOB entre las no descartadas con tipo de cambio conocido. */
+/** La más barata en ARS entre las no descartadas con tipo de cambio conocido. */
 export function idMasBarata(cotizaciones: CotizacionListada[]): string | null {
   let mejor: CotizacionListada | null = null;
   for (const c of cotizaciones) {
-    if (c.estado === "descartada" || c.totalBob === null) continue;
-    if (!mejor || c.totalBob < mejor.totalBob!) mejor = c;
+    if (c.estado === "descartada" || c.totalArs === null) continue;
+    if (!mejor || c.totalArs < mejor.totalArs!) mejor = c;
   }
   return mejor?.id ?? null;
 }
