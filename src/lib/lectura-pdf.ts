@@ -1,13 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { ErrorNegocio } from "@/lib/acciones";
 import { MONEDAS, type Moneda } from "@/lib/money";
 
-/** Si no hay clave de API, el botón "Completar desde PDF" no aparece. */
+/** Si no hay clave de MiniMax, el botón "Completar desde PDF" no aparece. */
 export function hayLecturaPdf(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(process.env.MINIMAX_API_KEY);
 }
+
+/** MiniMax expone una API compatible con la de Anthropic: se usa el mismo SDK. */
+const clienteMiniMax = () =>
+  new Anthropic({ apiKey: process.env.MINIMAX_API_KEY, baseURL: "https://api.minimax.io/anthropic", timeout: 120_000 });
+
+export const MODELO = "MiniMax-M3";
+const HERRAMIENTA = "cargar_cotizacion";
 
 const respuestaSchema = z.object({
   proveedor: z.string().nullable(),
@@ -56,17 +62,22 @@ const aCampo = (valor: number | null) => (valor === null || !Number.isFinite(val
 export async function leerCotizacionPdf(
   pdf: Buffer,
   contexto: { rubro: string; dias: number; proveedores: { id: string; nombre: string }[] },
-  cliente: Pick<Anthropic, "beta"> = new Anthropic(),
+  cliente: Pick<Anthropic, "messages"> = clienteMiniMax(),
 ): Promise<CotizacionLeida> {
   let respuesta;
   try {
-    respuesta = await cliente.beta.messages.parse({
-      model: "claude-opus-5-5",
-      max_tokens: 16000,
-      output_config: { effort: "low", format: betaZodOutputFormat(respuestaSchema) },
-      // Si el modelo declina, la API reintenta sola con otro modelo.
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
+    respuesta = await cliente.messages.create({
+      model: MODELO,
+      max_tokens: 8000,
+      // La respuesta llega como la entrada de una herramienta obligatoria: JSON con forma fija.
+      tools: [
+        {
+          name: HERRAMIENTA,
+          description: "Carga en el sistema los datos sacados de la cotización.",
+          input_schema: z.toJSONSchema(respuestaSchema) as Anthropic.Tool.InputSchema,
+        },
+      ],
+      tool_choice: { type: "tool", name: HERRAMIENTA },
       messages: [
         {
           role: "user",
@@ -77,7 +88,7 @@ export async function leerCotizacionPdf(
               text: [
                 `Este PDF es la cotización de un proveedor para el rubro "${contexto.rubro}" de un evento.`,
                 `El rubro se contrata por ${contexto.dias === 1 ? "1 día" : "2 días"}.`,
-                "Sacá estos datos:",
+                `Sacá estos datos y cargalos con la herramienta ${HERRAMIENTA}:`,
                 "- proveedor: el nombre de la empresa que cotiza (no el cliente). null si no figura.",
                 "- moneda: ARS (pesos argentinos), USD o BOB (bolivianos). null si no se puede saber.",
                 "- precioPorDia: el precio de un día, sin descuentos. Si solo hay un total por varios días, dividilo por la cantidad de días. null si no hay precio.",
@@ -97,8 +108,10 @@ export async function leerCotizacionPdf(
     throw error;
   }
 
-  const datos = respuesta.stop_reason === "refusal" ? null : respuesta.parsed_output;
-  if (!datos) throw new ErrorNegocio(NO_SE_PUDO);
+  const llamada = respuesta.content.find((b) => b.type === "tool_use" && b.name === HERRAMIENTA);
+  const leidos = llamada?.type === "tool_use" ? respuestaSchema.safeParse(llamada.input) : null;
+  if (!leidos?.success) throw new ErrorNegocio(NO_SE_PUDO);
+  const datos = leidos.data;
   return {
     proveedorId: emparejarProveedor(datos.proveedor, contexto.proveedores),
     proveedor: datos.proveedor,

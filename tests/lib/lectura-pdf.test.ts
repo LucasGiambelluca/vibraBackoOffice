@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
-import { emparejarProveedor, leerCotizacionPdf } from "@/lib/lectura-pdf";
+import { emparejarProveedor, leerCotizacionPdf, MODELO } from "@/lib/lectura-pdf";
 
 const PROVEEDORES = [
   { id: "p1", nombre: "Sonido Andino" },
@@ -10,12 +10,21 @@ const CONTEXTO = { rubro: "Sonido", dias: 2, proveedores: PROVEEDORES };
 
 /** Cliente falso: devuelve `respuesta` (o lanza `error`) y guarda el pedido. */
 function cliente(respuesta: object | null, error?: Error) {
-  const parse = vi.fn(async () => {
+  const create = vi.fn(async () => {
     if (error) throw error;
     return respuesta;
   });
-  return { parse, cliente: { beta: { messages: { parse } } } as unknown as Pick<Anthropic, "beta"> };
+  return { create, cliente: { messages: { create } } as unknown as Pick<Anthropic, "messages"> };
 }
+
+/** Respuesta con la herramienta llamada con `input`. */
+const conHerramienta = (input: object) => ({
+  stop_reason: "tool_use",
+  content: [
+    { type: "thinking", thinking: "..." },
+    { type: "tool_use", id: "t1", name: "cargar_cotizacion", input },
+  ],
+});
 
 describe("emparejarProveedor", () => {
   it("compara sin mayúsculas, tildes ni sufijos", () => {
@@ -29,16 +38,15 @@ describe("emparejarProveedor", () => {
 
 describe("leerCotizacionPdf", () => {
   it("manda el PDF en base64 con el contexto del rubro y mapea la respuesta", async () => {
-    const { parse, cliente: c } = cliente({
-      stop_reason: "end_turn",
-      parsed_output: {
+    const { create, cliente: c } = cliente(
+      conHerramienta({
         proveedor: "Sonido Andino SRL",
         moneda: "USD",
         precioPorDia: 1499.999,
         descuento2DiasPorcentaje: 10,
         descripcion: "  PA line array y operador. ",
-      },
-    });
+      }),
+    );
     const leida = await leerCotizacionPdf(Buffer.from("%PDF-1.4"), CONTEXTO, c);
     expect(leida).toEqual({
       proveedorId: "p1",
@@ -49,11 +57,13 @@ describe("leerCotizacionPdf", () => {
       descripcion: "PA line array y operador.",
     });
 
-    const pedido = (parse.mock.calls[0] as unknown[])[0] as {
+    const pedido = (create.mock.calls[0] as unknown[])[0] as {
       model: string;
+      tool_choice: { name: string };
       messages: { content: { type: string; source?: { data: string }; text?: string }[] }[];
     };
-    expect(pedido.model).toBe("claude-opus-5-5");
+    expect(pedido.model).toBe(MODELO);
+    expect(pedido.tool_choice).toEqual({ type: "tool", name: "cargar_cotizacion" });
     const [documento, texto] = pedido.messages[0].content;
     expect(documento).toMatchObject({ type: "document", source: { data: Buffer.from("%PDF-1.4").toString("base64") } });
     expect(texto.text).toContain('rubro "Sonido"');
@@ -61,10 +71,9 @@ describe("leerCotizacionPdf", () => {
   });
 
   it("campos vacíos quedan en null", async () => {
-    const { cliente: c } = cliente({
-      stop_reason: "end_turn",
-      parsed_output: { proveedor: null, moneda: null, precioPorDia: null, descuento2DiasPorcentaje: null, descripcion: "" },
-    });
+    const { cliente: c } = cliente(
+      conHerramienta({ proveedor: null, moneda: null, precioPorDia: null, descuento2DiasPorcentaje: null, descripcion: "" }),
+    );
     expect(await leerCotizacionPdf(Buffer.from(""), CONTEXTO, c)).toMatchObject({
       proveedorId: null,
       moneda: null,
@@ -73,13 +82,13 @@ describe("leerCotizacionPdf", () => {
     });
   });
 
-  it("si la API falla, se niega o no devuelve datos, pide completar a mano", async () => {
+  it("si la API falla, no llama a la herramienta o devuelve datos inválidos, pide completar a mano", async () => {
     const error = new Anthropic.APIError(500, undefined, "caída", new Headers());
     vi.spyOn(console, "error").mockImplementation(() => {});
     for (const c of [
       cliente(null, error).cliente,
-      cliente({ stop_reason: "refusal", parsed_output: null }).cliente,
-      cliente({ stop_reason: "end_turn", parsed_output: null }).cliente,
+      cliente({ stop_reason: "end_turn", content: [{ type: "text", text: "No puedo." }] }).cliente,
+      cliente(conHerramienta({ proveedor: "X", moneda: "EUR", precioPorDia: "mil", descripcion: "" })).cliente,
     ])
       await expect(leerCotizacionPdf(Buffer.from(""), CONTEXTO, c)).rejects.toThrow(
         "No se pudo leer el PDF. Completá los datos a mano.",

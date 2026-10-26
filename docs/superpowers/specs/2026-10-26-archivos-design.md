@@ -24,9 +24,9 @@ sistema lea el PDF del proveedor y complete el formulario.
 - El PDF actual de cada cotización (`cotizacion.adjunto`) pasa a ser un archivo de la
   cotización. La columna se borra.
 - Lectura con IA: en "Nueva cotización", botón **Completar desde PDF**. Se sube el PDF,
-  Claude devuelve proveedor, moneda, precio por día, descuento por 2 días y descripción, y el
+  MiniMax devuelve proveedor, moneda, precio por día, descuento por 2 días y descripción, y el
   formulario se completa para revisar. El PDF queda adjunto a la cotización al guardarla. Si
-  no hay `ANTHROPIC_API_KEY`, el botón no aparece.
+  no hay `MINIMAX_API_KEY`, el botón no aparece.
 
 Fuera de alcance: carpetas, versiones de un archivo, Excel/Word, HEIC (iPhone convierte a JPEG
 al subir desde el navegador), lectura con IA de fotos.
@@ -75,8 +75,9 @@ de la cotización (`nombre` = "Cotización.pdf", `evento_id` por join, `subido_p
   `/api/adjuntos`.
 - `src/components/archivos/`: `SeccionArchivos` (server), `SubirArchivos` (client),
   `GrillaArchivos` + `Visor` (client).
-- `src/lib/lectura-pdf.ts`: `leerCotizacionPdf(bytes)` con `@anthropic-ai/sdk`,
-  `claude-opus-5-5`, `messages.parse` + `zodOutputFormat`; acción `leerPdfAction` que
+- `src/lib/lectura-pdf.ts`: `leerCotizacionPdf(bytes)` con `@anthropic-ai/sdk`
+  apuntado a la API compatible de MiniMax (`MiniMax-M3`), con una herramienta obligatoria
+  cuyo input se valida con zod; acción `leerPdfAction` que
   devuelve los campos (no guarda nada). El proveedor se empareja por nombre con los
   existentes; si no hay, se avisa para crearlo.
 
