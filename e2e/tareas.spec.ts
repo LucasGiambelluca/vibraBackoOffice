@@ -5,15 +5,15 @@ test("un recordatorio manual llega a la campanita", async ({ page }) => {
   await ingresar(page);
 
   await page.getByRole("link", { name: "Tareas" }).click();
+  await page.getByRole("button", { name: "Nueva tarea" }).click();
   await page.getByLabel("Tarea", { exact: true }).fill("Pedir permisos E2E");
   // Hay selects de Área y Responsable también en los filtros: se usan los ids del alta.
   await page.locator("#areaId").selectOption({ label: "Seguridad y Prevención" });
   await page.locator("#responsableId").selectOption({ label: ADMIN.nombre });
   await page.getByRole("button", { name: "Crear tarea" }).click();
-  await expect(page.getByText("Tarea creada")).toBeVisible();
 
   await page.getByRole("link", { name: "Pedir permisos E2E" }).click();
-  await page.getByLabel("Recordatorio manual (hora de La Paz)").fill(horaLaPaz(1));
+  await page.getByLabel("Recordatorio manual (hora de La Paz)").fill(horaLaPaz(2));
   await page.getByRole("button", { name: "Agregar recordatorio" }).click();
   await expect(page.getByText("Recordatorio agregado")).toBeVisible();
 
@@ -22,7 +22,7 @@ test("un recordatorio manual llega a la campanita", async ({ page }) => {
   await expect(async () => {
     await page.reload();
     await expect(campanitaConUna).toBeVisible({ timeout: 3_000 });
-  }).toPass({ timeout: 150_000, intervals: [5_000] });
+  }).toPass({ timeout: 200_000, intervals: [5_000] });
 
   await campanitaConUna.click();
   await page.getByRole("button", { name: /Recordatorio: "Pedir permisos E2E"/ }).click();

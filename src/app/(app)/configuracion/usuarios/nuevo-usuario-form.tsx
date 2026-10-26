@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { Select } from "@/components/campos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +11,7 @@ export function NuevoUsuarioForm() {
   const [estado, accion, pendiente] = useActionState(crearUsuarioAction, null);
 
   return (
-    <form action={accion} className="grid gap-4 sm:grid-cols-2">
+    <form action={accion} className="grid gap-5 sm:grid-cols-2">
       <div className="space-y-2">
         <Label htmlFor="nombre">Nombre</Label>
         <Input id="nombre" name="nombre" required />
@@ -25,22 +26,17 @@ export function NuevoUsuarioForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="rol">Rol</Label>
-        <select
-          id="rol"
-          name="rol"
-          defaultValue="editor"
-          className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-        >
+        <Select id="rol" name="rol" defaultValue="editor">
           <option value="editor">Editor</option>
           <option value="admin">Admin</option>
-        </select>
+        </Select>
       </div>
       <div className="flex items-center gap-3 sm:col-span-2">
-        <Button type="submit" disabled={pendiente}>
+        <Button type="submit" disabled={pendiente} className="max-sm:h-12 max-sm:w-full">
           {pendiente ? "Creando…" : "Crear usuario"}
         </Button>
         {estado?.ok === false && <p className="text-sm text-destructive">{estado.error}</p>}
-        {estado?.ok && <p className="text-sm text-green-600">Usuario creado. Pasale el email y la contraseña inicial.</p>}
+        {estado?.ok && <p className="text-sm font-medium text-ok">Usuario creado. Pasale el email y la contraseña inicial.</p>}
       </div>
     </form>
   );

@@ -7,7 +7,7 @@ export async function ingresar(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(ADMIN.email);
   await page.getByLabel("Contraseña").fill(ADMIN.password);
-  await page.getByRole("button", { name: "Ingresar" }).click();
+  await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("heading", { name: /Hola/ })).toBeVisible();
 }
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  cuandoVence,
   desdeHoraLaPaz,
+  fechaLarga,
   formatearFecha,
   hoyEnLaPaz,
   mensajeRecordatorio,
@@ -81,5 +83,19 @@ describe("mensajeRecordatorio", () => {
       '"Vallas" está vencida desde el 10/03/2027',
     );
     expect(mensajeRecordatorio("manual", "Vallas", null)).toBe('Recordatorio: "Vallas"');
+  });
+});
+
+describe("fechas para mostrar", () => {
+  it("cuandoVence dice vencida, hoy, mañana o el día de la semana", () => {
+    expect(cuandoVence("2027-02-27", "2027-03-01")).toBe("Vencida 27/02");
+    expect(cuandoVence("2027-03-01", "2027-03-01")).toBe("Vence hoy");
+    expect(cuandoVence("2027-03-02", "2027-03-01")).toBe("Vence mañana");
+    expect(cuandoVence("2027-03-04", "2027-03-01")).toBe("Jue 04/03");
+  });
+
+  it("fechaLarga usa el día de La Paz", () => {
+    // 02:00 UTC del 2/3 todavía es 1/3 en La Paz.
+    expect(fechaLarga(new Date("2027-03-02T02:00:00Z"))).toBe("lunes 1 de marzo");
   });
 });

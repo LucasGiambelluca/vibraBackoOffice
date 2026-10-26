@@ -2,8 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "e2e",
-  // El test de recordatorios espera al worker (hasta ~1 minuto por la precisión de minutos).
-  timeout: 180_000,
+  // El test de recordatorios espera al worker (hasta ~2 minutos por la precisión de minutos).
+  timeout: 240_000,
   expect: { timeout: 15_000 },
   workers: 1,
   use: { baseURL: "http://localhost:3100", trace: "retain-on-failure", locale: "es-BO" },

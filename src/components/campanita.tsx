@@ -65,49 +65,60 @@ export function Campanita() {
 
   return (
     <div className="relative">
-      <Button
-        variant="ghost"
-        size="sm"
+      <button
+        type="button"
         onClick={() => setAbierta(!abierta)}
         aria-label={`Notificaciones${noLeidas ? ` (${noLeidas} sin leer)` : ""}`}
         aria-expanded={abierta}
+        className="relative grid size-11 place-items-center rounded-full border border-border bg-card transition-[background-color,transform] duration-100 hover:bg-muted active:scale-95 md:size-10 md:rounded-xl"
       >
-        <Bell className="size-4" />
+        <Bell className="size-[1.125rem]" strokeWidth={1.75} />
         {noLeidas > 0 && (
-          <span className="rounded-full bg-destructive px-1.5 text-xs font-medium text-white">{noLeidas}</span>
+          <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-marca px-1 text-[0.6875rem] font-bold text-black ring-2 ring-background">
+            {noLeidas}
+          </span>
         )}
-      </Button>
+      </button>
       {abierta && (
-        <div className="absolute left-0 z-20 mt-2 w-80 rounded-lg border bg-background p-2 shadow-lg">
-          <div className="flex items-center justify-between px-2 py-1">
-            <p className="text-sm font-medium">Notificaciones</p>
-            {noLeidas > 0 && (
-              <Button variant="link" size="xs" onClick={marcarTodas}>
-                Marcar todas como leídas
-              </Button>
+        <>
+          <div className="fixed inset-0 z-30" aria-hidden onClick={() => setAbierta(false)} />
+          <div className="fixed inset-x-3 top-16 z-40 overflow-hidden rounded-2xl border bg-popover shadow-[0_16px_48px_rgb(0_0_0/0.16)] md:absolute md:inset-x-auto md:top-full md:right-0 md:mt-2 md:w-96">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <p className="font-display text-base font-bold">Notificaciones</p>
+              {noLeidas > 0 && (
+                <Button variant="link" size="xs" className="text-marca-tinta" onClick={marcarTodas}>
+                  Marcar todas como leídas
+                </Button>
+              )}
+            </div>
+            {!datos || datos.items.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">No tenés notificaciones.</p>
+            ) : (
+              <ul className="max-h-[60dvh] divide-y overflow-y-auto">
+                {datos.items.map((n) => (
+                  <li key={n.id}>
+                    <button
+                      type="button"
+                      onClick={() => abrir(n)}
+                      className="flex w-full gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-muted/60"
+                    >
+                      <span
+                        aria-hidden
+                        className={cn("mt-1.5 size-2 shrink-0 rounded-full", n.leida ? "bg-transparent" : "bg-marca")}
+                      />
+                      <span className={cn("min-w-0 flex-1", !n.leida && "font-semibold")}>
+                        {n.mensaje}
+                        <span className="mt-0.5 block text-xs font-normal text-tinta-3">
+                          {formatearFechaHora(new Date(n.createdAt))}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-          {!datos || datos.items.length === 0 ? (
-            <p className="px-2 py-3 text-sm text-muted-foreground">No tenés notificaciones.</p>
-          ) : (
-            <ul className="max-h-96 overflow-y-auto">
-              {datos.items.map((n) => (
-                <li key={n.id}>
-                  <button
-                    type="button"
-                    onClick={() => abrir(n)}
-                    className={cn("w-full rounded-md px-2 py-2 text-left text-sm hover:bg-muted", !n.leida && "font-medium")}
-                  >
-                    {n.mensaje}
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      {formatearFechaHora(new Date(n.createdAt))}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        </>
       )}
     </div>
   );

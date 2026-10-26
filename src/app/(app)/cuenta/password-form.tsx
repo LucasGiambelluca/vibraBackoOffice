@@ -45,7 +45,7 @@ export function PasswordForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="max-w-sm space-y-4">
+    <form onSubmit={onSubmit} className="space-y-5">
       <div className="space-y-2">
         <Label htmlFor="actual">Contraseña actual</Label>
         <Input id="actual" name="actual" type="password" autoComplete="current-password" required />
@@ -59,9 +59,9 @@ export function PasswordForm() {
         <Input id="repetir" name="repetir" type="password" autoComplete="new-password" required />
       </div>
       {mensaje && (
-        <p className={cn("text-sm", mensaje.ok ? "text-green-600" : "text-destructive")}>{mensaje.texto}</p>
+        <p className={cn("text-sm", mensaje.ok ? "font-medium text-ok" : "text-destructive")}>{mensaje.texto}</p>
       )}
-      <Button type="submit" disabled={pendiente}>
+      <Button type="submit" disabled={pendiente} className="max-sm:h-12 max-sm:w-full">
         {pendiente ? "Guardando…" : "Cambiar contraseña"}
       </Button>
     </form>

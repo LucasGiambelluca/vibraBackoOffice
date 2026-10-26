@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Trash } from "lucide-react";
+import { Encabezado } from "@/components/encabezado";
 import { EstadoCotizacion } from "@/components/estado-cotizacion";
 import { BotonAccion, FormAccion } from "@/components/form-accion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,81 +23,83 @@ export default async function ProveedorPage({ params }: PageProps<"/proveedores/
   const cotizaciones = await listarCotizaciones(db, { proveedorId });
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <Link href="/proveedores" className="text-sm text-muted-foreground hover:underline">
-            ← Proveedores
-          </Link>
-          <h1 className="text-2xl font-semibold">{proveedor.nombre}</h1>
-        </div>
-        {can(usuario.role, "borrar") && (
-          <BotonAccion
-            accion={borrarProveedorAction}
-            campos={{ proveedorId }}
-            texto="Borrar proveedor"
-            enviando="Borrando…"
-            variant="destructive"
-            confirmar
-          />
-        )}
-      </div>
+    <div>
+      <Encabezado
+        volver={{ href: "/proveedores", texto: "Proveedores" }}
+        titulo={proveedor.nombre}
+        bajada={`${cotizaciones.length} ${cotizaciones.length === 1 ? "cotización" : "cotizaciones"}`}
+        acciones={
+          can(usuario.role, "borrar") && (
+            <BotonAccion
+              accion={borrarProveedorAction}
+              campos={{ proveedorId }}
+              texto="Borrar"
+              enviando="Borrando…"
+              variant="destructive"
+              icono={<Trash />}
+              className="h-10"
+              confirmar
+            />
+          )
+        }
+      />
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Datos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <FormAccion
+              accion={editarProveedorAction}
+              enviar="Guardar cambios"
+              enviando="Guardando…"
+              exito="Guardado"
+              className="space-y-5"
+            >
+              <input type="hidden" name="proveedorId" value={proveedorId} />
+              <ProveedorCampos valores={proveedor} />
+            </FormAccion>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Datos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FormAccion
-            accion={editarProveedorAction}
-            enviar="Guardar cambios"
-            enviando="Guardando…"
-            exito="Guardado"
-            className="space-y-4"
-          >
-            <input type="hidden" name="proveedorId" value={proveedorId} />
-            <ProveedorCampos valores={proveedor} />
-          </FormAccion>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Cotizaciones</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {cotizaciones.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Este proveedor todavía no tiene cotizaciones.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Rubro</TableHead>
-                  <TableHead>Descripción</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Estado</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cotizaciones.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell>
-                      <Link href={`/presupuestos/${c.rubroId}`} className="hover:underline">
-                        {c.rubro}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">{c.descripcion}</TableCell>
-                    <TableCell className="text-right">{formatearMonto(c.total, c.moneda)}</TableCell>
-                    <TableCell>
-                      <EstadoCotizacion estado={c.estado} />
-                    </TableCell>
+        <Card>
+          <CardHeader>
+            <CardTitle>Cotizaciones</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {cotizaciones.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Este proveedor todavía no tiene cotizaciones.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Rubro</TableHead>
+                    <TableHead className="max-sm:hidden">Descripción</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead>Estado</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {cotizaciones.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell>
+                        <Link href={`/presupuestos/${c.rubroId}`} className="font-semibold hover:underline">
+                          {c.rubro}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="max-w-48 truncate text-muted-foreground max-sm:hidden">{c.descripcion}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatearMonto(c.total, c.moneda)}</TableCell>
+                      <TableCell>
+                        <EstadoCotizacion estado={c.estado} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

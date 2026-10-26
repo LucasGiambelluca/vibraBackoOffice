@@ -1,13 +1,14 @@
+import { Check, Ellipsis, FileText, Info, RotateCcw, TrendingDown } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Encabezado } from "@/components/encabezado";
 import { EstadoCotizacion } from "@/components/estado-cotizacion";
 import { BotonAccion, FormAccion } from "@/components/form-accion";
-import { Badge } from "@/components/ui/badge";
+import { Hoja } from "@/components/hoja";
+import { Pastilla } from "@/components/pastilla";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/db";
-import { idMasBarata, listarCotizaciones } from "@/lib/cotizaciones";
+import { idMasBarata, listarCotizaciones, type CotizacionListada } from "@/lib/cotizaciones";
 import { formatearMonto } from "@/lib/money";
 import { can } from "@/lib/permissions";
 import { listarProveedores } from "@/lib/proveedores";
@@ -23,6 +24,8 @@ import {
 } from "../actions";
 import { CotizacionCampos } from "../cotizacion-campos";
 
+type Permisos = { aprobar: boolean; borrar: boolean };
+
 export default async function RubroPage({ params }: PageProps<"/presupuestos/[rubroId]">) {
   const usuario = await usuarioActual();
   const { rubroId } = await params;
@@ -34,160 +37,273 @@ export default async function RubroPage({ params }: PageProps<"/presupuestos/[ru
     listarProveedores(db),
   ]);
   const masBarata = idMasBarata(cotizaciones);
-  const puedeAprobar = can(usuario.role, "aprobar");
-  const puedeBorrar = can(usuario.role, "borrar");
+  const permisos = { aprobar: can(usuario.role, "aprobar"), borrar: can(usuario.role, "borrar") };
   const faltaCambio = cotizaciones.some((c) => c.totalBob === null);
+  const vigentes = cotizaciones.filter((c) => c.estado !== "descartada");
+  const descartadas = cotizaciones.filter((c) => c.estado === "descartada");
+  const dias = rubro.dias === 1 ? "1 día" : "2 días";
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Link href="/presupuestos" className="text-sm text-muted-foreground hover:underline">
-          ← Presupuestos
-        </Link>
-        <h1 className="text-2xl font-semibold">{rubro.nombre}</h1>
-        <p className="text-muted-foreground">
-          {rubro.area} · {rubro.dias === 1 ? "1 día" : "2 días"}
-        </p>
-      </div>
+    <div>
+      <Encabezado
+        volver={{ href: "/presupuestos", texto: "Presupuestos" }}
+        titulo={rubro.nombre}
+        bajada={
+          <>
+            {rubro.area} · se contrata por {dias} · {cotizaciones.length}{" "}
+            {cotizaciones.length === 1 ? "cotización" : "cotizaciones"}
+          </>
+        }
+        acciones={
+          proveedores.length > 0 && (
+            <Hoja boton="Nueva cotización" titulo={`Nueva cotización · ${rubro.nombre}`}>
+              <FormAccion
+                accion={crearCotizacionAction}
+                enviar="Agregar cotización"
+                enviando="Guardando…"
+                exito="Cotización agregada"
+                limpiar
+                className="space-y-5"
+              >
+                <input type="hidden" name="rubroId" value={rubroId} />
+                <CotizacionCampos proveedores={proveedores} dias={rubro.dias} />
+              </FormAccion>
+            </Hoja>
+          )
+        }
+      />
+
+      <p className="mb-6 flex gap-3 rounded-2xl bg-[#ebebe8] px-4 py-3 text-sm text-muted-foreground md:items-center md:px-5">
+        <Info className="mt-0.5 size-4 shrink-0 md:mt-0" />
+        Comparación en bolivianos. Al aprobar una cotización, las demás del rubro pasan a descartadas. Solo un admin
+        aprueba.
+      </p>
 
       {faltaCambio && (
-        <p className="text-sm text-destructive">
+        <p className="mb-6 rounded-2xl bg-peligro-suave px-4 py-3 text-sm font-medium text-peligro md:px-5">
           Hay cotizaciones en monedas sin tipo de cambio: no se pueden comparar en BOB.
         </p>
       )}
 
-      {cotizaciones.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Todavía no hay cotizaciones para este rubro.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Proveedor</TableHead>
-              <TableHead>Qué incluye</TableHead>
-              <TableHead className="text-right">Precio/día</TableHead>
-              {rubro.dias === 2 && <TableHead className="text-right">Desc.</TableHead>}
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-right">Total BOB</TableHead>
-              {rubro.dias === 2 && <TableHead className="text-right">Ahorro</TableHead>}
-              <TableHead>Estado</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {cotizaciones.map((c) => (
-              <TableRow key={c.id} className={cn(c.id === masBarata && "bg-green-50 dark:bg-green-950/30")}>
-                <TableCell className="font-medium">
-                  <Link href={`/proveedores/${c.proveedorId}`} className="hover:underline">
-                    {c.proveedor}
-                  </Link>
-                  {c.id === masBarata && (
-                    <Badge variant="secondary" className="ml-2">
-                      Más barata
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell className="max-w-xs whitespace-normal">
-                  {c.descripcion}
-                  {c.adjunto && (
-                    <a
-                      href={`/api/adjuntos/${c.adjunto}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="ml-2 text-sm underline"
-                    >
-                      PDF
-                    </a>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">{formatearMonto(c.precioDia, c.moneda)}</TableCell>
-                {rubro.dias === 2 && <TableCell className="text-right">{c.descuento2Dias} %</TableCell>}
-                <TableCell className="text-right">{formatearMonto(c.total, c.moneda)}</TableCell>
-                <TableCell className="text-right">
-                  {c.totalBob === null ? "—" : formatearMonto(c.totalBob, "BOB")}
-                </TableCell>
-                {rubro.dias === 2 && (
-                  <TableCell className="text-right">{formatearMonto(c.ahorro, c.moneda)}</TableCell>
-                )}
-                <TableCell>
-                  <EstadoCotizacion estado={c.estado} />
-                  {c.estado === "aprobada" && c.aprobadaAt && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {c.aprobador ?? "Usuario borrado"} · {formatearFechaHora(c.aprobadaAt)}
-                    </p>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap items-center justify-end gap-1">
-                    <Link
-                      href={`/presupuestos/${rubroId}/${c.id}`}
-                      className={buttonVariants({ variant: "ghost", size: "sm" })}
-                    >
-                      Editar
-                    </Link>
-                    {puedeAprobar && c.estado !== "aprobada" && (
-                      <BotonAccion
-                        accion={aprobarCotizacionAction}
-                        campos={{ cotizacionId: c.id }}
-                        texto="Aprobar"
-                        enviando="Aprobando…"
-                        variant="default"
-                      />
-                    )}
-                    {puedeAprobar && c.estado === "aprobada" && (
-                      <BotonAccion
-                        accion={revertirAprobacionAction}
-                        campos={{ cotizacionId: c.id }}
-                        texto="Revertir"
-                        enviando="Revirtiendo…"
-                        confirmar
-                      />
-                    )}
-                    {puedeBorrar && (
-                      <BotonAccion
-                        accion={borrarCotizacionAction}
-                        campos={{ cotizacionId: c.id }}
-                        texto="Borrar"
-                        enviando="Borrando…"
-                        variant="ghost"
-                        confirmar
-                      />
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      {proveedores.length === 0 && (
+        <p className="mb-6 text-sm text-muted-foreground">
+          Para cargar cotizaciones primero cargá al menos un proveedor en{" "}
+          <Link href="/proveedores" className="font-medium text-foreground underline">
+            Proveedores
+          </Link>
+          .
+        </p>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Nueva cotización</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {proveedores.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Primero cargá al menos un proveedor en{" "}
-              <Link href="/proveedores" className="underline">
-                Proveedores
-              </Link>
-              .
-            </p>
-          ) : (
-            <FormAccion
-              accion={crearCotizacionAction}
-              enviar="Agregar cotización"
-              enviando="Guardando…"
-              exito="Cotización agregada"
-              limpiar
-              className="space-y-4"
-            >
-              <input type="hidden" name="rubroId" value={rubroId} />
-              <CotizacionCampos proveedores={proveedores} dias={rubro.dias} />
-            </FormAccion>
+      {cotizaciones.length === 0 ? (
+        <div className="rounded-2xl border border-dashed px-6 py-14 text-center">
+          <p className="font-display text-lg font-bold">Todavía no hay cotizaciones</p>
+          <p className="mt-1 text-sm text-muted-foreground">Cargá la primera con “Nueva cotización”.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-stretch">
+          <div
+            className={cn(
+              "grid flex-1 gap-4 sm:grid-cols-2 md:gap-5",
+              descartadas.length > 0 ? "2xl:grid-cols-3" : "xl:grid-cols-3",
+            )}
+          >
+            {vigentes.map((c) => (
+              <TarjetaCotizacion
+                key={c.id}
+                c={c}
+                rubroId={rubroId}
+                dosDias={rubro.dias === 2}
+                masBarata={c.id === masBarata}
+                permisos={permisos}
+              />
+            ))}
+          </div>
+          {descartadas.length > 0 && (
+            <aside className="rounded-2xl bg-[#ebebe8] p-5 lg:w-64 lg:shrink-0 lg:p-6">
+              <h2 className="font-sans text-[0.6875rem] font-semibold tracking-[0.1em] text-tinta-3 uppercase">
+                Descartadas
+              </h2>
+              <ul className="mt-4 space-y-4">
+                {descartadas.map((c) => (
+                  <li key={c.id} className="flex items-start justify-between gap-3">
+                    <Link href={`/presupuestos/${rubroId}/${c.id}`} className="min-w-0 hover:underline">
+                      <span className="block font-semibold text-muted-foreground">{c.proveedor}</span>
+                      <span className="block text-sm text-tinta-3 tabular-nums">
+                        {formatearMonto(c.total, c.moneda)}
+                      </span>
+                    </Link>
+                    <MenuCotizacion c={c} permisos={permisos} />
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-6 text-xs leading-relaxed text-tinta-3 max-lg:hidden">
+                Se descartan solas cuando se aprueba otra cotización del rubro. Si el admin revierte la aprobación,
+                quedan como estaban.
+              </p>
+            </aside>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
+  );
+}
+
+function TarjetaCotizacion({
+  c,
+  rubroId,
+  dosDias,
+  masBarata,
+  permisos,
+}: {
+  c: CotizacionListada;
+  rubroId: string;
+  dosDias: boolean;
+  masBarata: boolean;
+  permisos: Permisos;
+}) {
+  const aprobada = c.estado === "aprobada";
+  const filas = [
+    { texto: "Precio por día", valor: formatearMonto(c.precioDia, c.moneda) },
+    ...(dosDias
+      ? [
+          { texto: "Descuento 2 días", valor: `${c.descuento2Dias} %` },
+          { texto: "Ahorro", valor: formatearMonto(c.ahorro, c.moneda) },
+        ]
+      : []),
+  ];
+
+  return (
+    <article
+      className={cn(
+        "flex flex-col rounded-2xl bg-card p-5 ring-1 ring-border md:p-6",
+        masBarata && !aprobada && "ring-2 ring-marca",
+        aprobada && "ring-2 ring-ok",
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <EstadoCotizacion estado={c.estado} />
+        {masBarata && (
+          <Pastilla tono="marca" punto={false} className="bg-marca text-black">
+            <TrendingDown className="size-3.5" />
+            Más barata
+          </Pastilla>
+        )}
+      </div>
+      <h2 className="mt-4 text-xl font-bold tracking-tight">
+        <Link href={`/proveedores/${c.proveedorId}`} className="hover:underline">
+          {c.proveedor}
+        </Link>
+      </h2>
+      <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-muted-foreground">{c.descripcion}</p>
+
+      <p className="mt-5 text-xs text-tinta-3">Total por {dosDias ? "2 días" : "1 día"}</p>
+      <p className="font-display text-[1.875rem] leading-tight font-extrabold tracking-[-0.03em] tabular-nums">
+        {formatearMonto(c.total, c.moneda)}
+      </p>
+      <p className="text-sm text-muted-foreground tabular-nums">
+        = {c.totalBob === null ? "sin tipo de cambio" : formatearMonto(c.totalBob, "BOB")}
+      </p>
+
+      <dl className="mt-4 divide-y border-t text-sm">
+        {filas.map((f) => (
+          <div key={f.texto} className="flex justify-between gap-4 py-2.5">
+            <dt className="text-muted-foreground">{f.texto}</dt>
+            <dd className="font-semibold tabular-nums">{f.valor}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {c.adjunto && (
+        <a
+          href={`/api/adjuntos/${c.adjunto}`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex items-center gap-2 self-start py-1 text-sm hover:underline"
+        >
+          <FileText className="size-4 text-muted-foreground" />
+          Cotización.pdf
+        </a>
+      )}
+
+      {aprobada && c.aprobadaAt && (
+        <p className="mt-3 text-xs text-tinta-3">
+          Aprobada por {c.aprobador ?? "un usuario borrado"} · {formatearFechaHora(c.aprobadaAt)}
+        </p>
+      )}
+
+      <div className="mt-auto flex items-center gap-2 pt-6">
+        {permisos.aprobar && !aprobada && (
+          <BotonAccion
+            accion={aprobarCotizacionAction}
+            campos={{ cotizacionId: c.id }}
+            texto="Aprobar"
+            enviando="Aprobando…"
+            variant={masBarata ? "default" : "outline"}
+            icono={<Check />}
+            className="h-10 px-4"
+          />
+        )}
+        <Link
+          href={`/presupuestos/${rubroId}/${c.id}`}
+          className={cn(buttonVariants({ variant: "outline" }), "flex-1 sm:flex-none")}
+        >
+          Editar
+        </Link>
+        <MenuCotizacion c={c} permisos={permisos} />
+      </div>
+    </article>
+  );
+}
+
+/** Acciones menos frecuentes (revertir, borrar) detrás de un "…". */
+function MenuCotizacion({ c, permisos }: { c: CotizacionListada; permisos: Permisos }) {
+  const revertir = permisos.aprobar && c.estado === "aprobada";
+  const aprobar = permisos.aprobar && c.estado === "descartada";
+  if (!revertir && !aprobar && !permisos.borrar) return null;
+
+  return (
+    <details className="relative ml-auto [&[open]>summary]:bg-muted">
+      <summary
+        aria-label={`Más acciones · ${c.proveedor}`}
+        className={cn(buttonVariants({ variant: "outline", size: "icon" }), "cursor-pointer list-none [&::-webkit-details-marker]:hidden")}
+      >
+        <Ellipsis />
+      </summary>
+      <div className="absolute right-0 bottom-full z-20 mb-2 flex min-w-44 flex-col items-stretch gap-1 rounded-2xl border bg-popover p-2 shadow-[0_12px_32px_rgb(0_0_0/0.14)] [&_button]:w-full [&_button]:justify-start [&_form]:justify-start">
+        {aprobar && (
+          <BotonAccion
+            accion={aprobarCotizacionAction}
+            campos={{ cotizacionId: c.id }}
+            texto="Aprobar"
+            enviando="Aprobando…"
+            variant="ghost"
+            icono={<Check />}
+          />
+        )}
+        {revertir && (
+          <BotonAccion
+            accion={revertirAprobacionAction}
+            campos={{ cotizacionId: c.id }}
+            texto="Revertir aprobación"
+            enviando="Revirtiendo…"
+            variant="ghost"
+            icono={<RotateCcw />}
+            confirmar
+          />
+        )}
+        {permisos.borrar && (
+          <BotonAccion
+            accion={borrarCotizacionAction}
+            campos={{ cotizacionId: c.id }}
+            texto="Borrar"
+            enviando="Borrando…"
+            variant="ghost"
+            className="text-destructive"
+            confirmar
+          />
+        )}
+      </div>
+    </details>
   );
 }

@@ -1,13 +1,15 @@
 import Form from "next/form";
 import Link from "next/link";
 import { Campo, Select } from "@/components/campos";
-import { EstadoTareaBadge, TEXTO_ESTADO_TAREA } from "@/components/estado-tarea";
+import { Encabezado } from "@/components/encabezado";
+import { EstadoTareaBadge } from "@/components/estado-tarea";
 import { FormAccion } from "@/components/form-accion";
+import { Hoja } from "@/components/hoja";
+import { Segmentos } from "@/components/segmentos";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/db";
-import { formatearFecha, hoyEnLaPaz } from "@/lib/reminders";
+import { fechaCorta, hoyEnLaPaz } from "@/lib/reminders";
 import { listarAreas } from "@/lib/rubros";
 import { usuarioActual } from "@/lib/session";
 import { ESTADOS_TAREA, listarTareas, type EstadoTarea } from "@/lib/tareas";
@@ -19,123 +21,155 @@ import { TareaCampos } from "./tarea-campos";
 
 const texto = (valor: string | string[] | undefined) => (typeof valor === "string" ? valor : "");
 
+const PESTANA: Record<EstadoTarea, string> = { pendiente: "Pendientes", en_curso: "En curso", hecha: "Hechas" };
+
 export default async function TareasPage({ searchParams }: PageProps<"/tareas">) {
   await usuarioActual();
   const filtros = await searchParams;
   const area = texto(filtros.area);
   const responsable = texto(filtros.responsable);
-  const estado = texto(filtros.estado);
+  const estado = (ESTADOS_TAREA as readonly string[]).includes(texto(filtros.estado))
+    ? (texto(filtros.estado) as EstadoTarea)
+    : undefined;
 
-  const [areas, usuarios, tareas] = await Promise.all([
+  // El estado se filtra acá para poder contar las tareas de cada pestaña.
+  const [areas, usuarios, todas] = await Promise.all([
     listarAreas(db),
     listarUsuarios(db),
-    listarTareas(db, {
-      areaId: Number(area) || undefined,
-      responsableId: responsable || undefined,
-      estado: (ESTADOS_TAREA as readonly string[]).includes(estado) ? (estado as EstadoTarea) : undefined,
-    }),
+    listarTareas(db, { areaId: Number(area) || undefined, responsableId: responsable || undefined }),
   ]);
+  const tareas = estado ? todas.filter((t) => t.estado === estado) : todas;
   const hoy = hoyEnLaPaz(new Date());
 
+  function enlace(nuevo: EstadoTarea | undefined) {
+    const params = new URLSearchParams();
+    if (nuevo) params.set("estado", nuevo);
+    if (area) params.set("area", area);
+    if (responsable) params.set("responsable", responsable);
+    const consulta = params.toString();
+    return consulta ? `/tareas?${consulta}` : "/tareas";
+  }
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Tareas</h1>
+    <div>
+      <Encabezado
+        titulo="Tareas"
+        bajada="El to-do general del evento. Con fecha límite, el sistema recuerda solo."
+        acciones={
+          <Hoja boton="Nueva tarea" titulo="Nueva tarea" abierta={texto(filtros.nueva) === "1"}>
+            <FormAccion
+              accion={crearTareaAction}
+              enviar="Crear tarea"
+              enviando="Creando…"
+              exito="Tarea creada"
+              limpiar
+              className="space-y-5"
+            >
+              <TareaCampos areas={areas} usuarios={usuarios} />
+            </FormAccion>
+          </Hoja>
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Nueva tarea</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FormAccion
-            accion={crearTareaAction}
-            enviar="Crear tarea"
-            enviando="Creando…"
-            exito="Tarea creada"
-            limpiar
-            className="space-y-4"
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <Segmentos
+          etiqueta="Estado"
+          items={[
+            { href: enlace(undefined), texto: "Todas", cantidad: todas.length, activo: !estado },
+            ...ESTADOS_TAREA.map((e) => ({
+              href: enlace(e),
+              texto: PESTANA[e],
+              cantidad: todas.filter((t) => t.estado === e).length,
+              activo: estado === e,
+            })),
+          ]}
+        />
+        <Form action="/tareas" className="grid grid-cols-2 items-end gap-2 sm:flex">
+          {estado && <input type="hidden" name="estado" value={estado} />}
+          <Campo id="filtro-area" label="Área" className="space-y-1 [&_label]:text-xs [&_label]:text-tinta-3">
+            <Select id="filtro-area" name="area" defaultValue={area} className="sm:w-48">
+              <option value="">Todas</option>
+              {areas.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nombre}
+                </option>
+              ))}
+            </Select>
+          </Campo>
+          <Campo
+            id="filtro-responsable"
+            label="Responsable"
+            className="space-y-1 [&_label]:text-xs [&_label]:text-tinta-3"
           >
-            <TareaCampos areas={areas} usuarios={usuarios} />
-          </FormAccion>
-        </CardContent>
-      </Card>
-
-      <Form action="/tareas" className="flex flex-wrap items-end gap-3">
-        <Campo id="filtro-area" label="Área">
-          <Select id="filtro-area" name="area" defaultValue={area}>
-            <option value="">Todas</option>
-            {areas.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.nombre}
-              </option>
-            ))}
-          </Select>
-        </Campo>
-        <Campo id="filtro-responsable" label="Responsable">
-          <Select id="filtro-responsable" name="responsable" defaultValue={responsable}>
-            <option value="">Todos</option>
-            {usuarios.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </Select>
-        </Campo>
-        <Campo id="filtro-estado" label="Estado">
-          <Select id="filtro-estado" name="estado" defaultValue={estado}>
-            <option value="">Todos</option>
-            {ESTADOS_TAREA.map((e) => (
-              <option key={e} value={e}>
-                {TEXTO_ESTADO_TAREA[e]}
-              </option>
-            ))}
-          </Select>
-        </Campo>
-        <Button type="submit" variant="outline">
-          Filtrar
-        </Button>
-      </Form>
+            <Select id="filtro-responsable" name="responsable" defaultValue={responsable} className="sm:w-44">
+              <option value="">Todos</option>
+              {usuarios.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </Select>
+          </Campo>
+          <Button type="submit" variant="outline" className="h-11 max-sm:col-span-2">
+            Filtrar
+          </Button>
+        </Form>
+      </div>
 
       {tareas.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No hay tareas con esos filtros.</p>
+        <div className="rounded-2xl border border-dashed px-6 py-14 text-center">
+          <p className="font-display text-lg font-bold">No hay tareas{estado || area || responsable ? " con esos filtros" : ""}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Creá una con “Nueva tarea”.</p>
+        </div>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tarea</TableHead>
-              <TableHead>Área</TableHead>
-              <TableHead>Responsable</TableHead>
-              <TableHead>Fecha límite</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tareas.map((t) => {
-              const vencida = t.estado !== "hecha" && !!t.fechaLimite && t.fechaLimite < hoy;
-              return (
-                <TableRow key={t.id}>
-                  <TableCell>
-                    <Link href={`/tareas/${t.id}`} className="font-medium hover:underline">
-                      {t.titulo}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{t.area}</TableCell>
-                  <TableCell>{t.responsable ?? <span className="text-muted-foreground">—</span>}</TableCell>
-                  <TableCell className={cn(vencida && "font-medium text-destructive")}>
-                    {t.fechaLimite ? formatearFecha(t.fechaLimite) : "—"}
-                    {vencida && " (vencida)"}
-                  </TableCell>
-                  <TableCell>
-                    <EstadoTareaBadge estado={t.estado} />
-                  </TableCell>
-                  <TableCell>
-                    <AccionesEstado tareaId={t.id} estado={t.estado} />
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <div className="rounded-2xl bg-card px-1 py-2 ring-1 ring-border md:px-3">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Tarea</TableHead>
+                <TableHead className="max-lg:hidden">Área</TableHead>
+                <TableHead className="max-lg:hidden">Responsable</TableHead>
+                <TableHead className="max-md:hidden">Fecha límite</TableHead>
+                <TableHead className="max-sm:hidden">Estado</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tareas.map((t) => {
+                const vencida = t.estado !== "hecha" && !!t.fechaLimite && t.fechaLimite < hoy;
+                const fecha = t.fechaLimite ? `${fechaCorta(t.fechaLimite)}${vencida ? " · vencida" : ""}` : "—";
+                return (
+                  <TableRow key={t.id}>
+                    <TableCell className="whitespace-normal">
+                      <Link href={`/tareas/${t.id}`} className="font-semibold hover:underline">
+                        {t.titulo}
+                      </Link>
+                      {t.notas && <span className="block max-w-xs truncate text-xs text-tinta-3 max-md:hidden">{t.notas}</span>}
+                      <span className="block text-xs text-tinta-3 lg:hidden">
+                        <span className={cn("md:hidden", vencida && "font-semibold text-peligro")}>{fecha} · </span>
+                        {t.area}
+                        {t.responsable && ` · ${t.responsable}`}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground max-lg:hidden">{t.area}</TableCell>
+                    <TableCell className="text-muted-foreground max-lg:hidden">
+                      {t.responsable ?? <span className="text-tinta-3">—</span>}
+                    </TableCell>
+                    <TableCell className={cn("tabular-nums max-md:hidden", vencida && "font-semibold text-peligro")}>
+                      {fecha}
+                    </TableCell>
+                    <TableCell className="max-sm:hidden">
+                      <EstadoTareaBadge estado={t.estado} />
+                    </TableCell>
+                    <TableCell>
+                      <AccionesEstado tareaId={t.id} estado={t.estado} compacto />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
       )}
     </div>
   );

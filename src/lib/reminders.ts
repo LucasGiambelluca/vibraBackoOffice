@@ -86,3 +86,30 @@ export function mensajeRecordatorio(
       return `Recordatorio: "${titulo}"`;
   }
 }
+
+const DIA_SEMANA = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+/** "dd/mm" de una fecha "YYYY-MM-DD". */
+export function fechaCorta(fecha: string): string {
+  return formatearFecha(fecha).slice(0, 5);
+}
+
+/** Cuándo vence una tarea, dicho como lo diría una persona: "Vence hoy", "Vence mañana", "Jue 29/10". */
+export function cuandoVence(fecha: string, hoy: string): string {
+  if (fecha < hoy) return `Vencida ${fechaCorta(fecha)}`;
+  if (fecha === hoy) return "Vence hoy";
+  if (fecha === sumarDias(hoy, 1)) return "Vence mañana";
+  return `${DIA_SEMANA[new Date(`${fecha}T00:00:00Z`).getUTCDay()]} ${fechaCorta(fecha)}`;
+}
+
+const FECHA_LARGA = new Intl.DateTimeFormat("es-BO", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: ZONA_EVENTO,
+});
+
+/** "lunes 26 de octubre" en La Paz. */
+export function fechaLarga(instante: Date): string {
+  return FECHA_LARGA.format(instante).replace(",", "");
+}

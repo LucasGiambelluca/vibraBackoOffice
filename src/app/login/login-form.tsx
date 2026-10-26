@@ -1,5 +1,6 @@
 "use client";
 
+import { Lock, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -32,18 +33,44 @@ export function LoginForm() {
 
   return (
     // method="post": si se envía antes de hidratar, que la clave no termine en la URL.
-    <form onSubmit={onSubmit} method="post" className="space-y-4">
+    <form onSubmit={onSubmit} method="post" className="space-y-5">
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" autoComplete="email" required />
+        <div className="relative">
+          <Mail className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-tinta-3" />
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            placeholder="nombre@rsgroup.bo"
+            className="h-12 pl-10"
+            required
+          />
+        </div>
       </div>
       <div className="space-y-2">
         <Label htmlFor="password">Contraseña</Label>
-        <Input id="password" name="password" type="password" autoComplete="current-password" required />
+        <div className="relative">
+          <Lock className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-tinta-3" />
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            className="h-12 pl-10"
+            required
+          />
+        </div>
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" className="w-full" disabled={cargando}>
-        {cargando ? "Ingresando…" : "Ingresar"}
+      {error && (
+        <p role="alert" className="text-sm font-medium text-destructive">
+          {error}
+        </p>
+      )}
+      <Button type="submit" size="lg" className="w-full" disabled={cargando}>
+        {cargando ? "Entrando…" : "Entrar"}
       </Button>
     </form>
   );

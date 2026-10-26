@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Encabezado } from "@/components/encabezado";
 import { FormAccion } from "@/components/form-accion";
 import { Card, CardContent } from "@/components/ui/card";
 import { db } from "@/db";
@@ -27,16 +27,15 @@ export default async function EditarCotizacionPage({
   const pierdeAprobacion = cotizacion.estado === "aprobada" && !can(usuario.role, "aprobar");
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <div>
-        <Link href={volver} className="text-sm text-muted-foreground hover:underline">
-          ← {rubro.nombre}
-        </Link>
-        <h1 className="text-2xl font-semibold">Editar cotización</h1>
-      </div>
+    <div className="max-w-3xl">
+      <Encabezado
+        volver={{ href: volver, texto: rubro.nombre }}
+        titulo="Editar cotización"
+        bajada={`${proveedores.find((p) => p.id === cotizacion.proveedorId)?.nombre ?? ""} · ${rubro.area}`}
+      />
 
       {pierdeAprobacion && (
-        <p className="text-sm text-destructive">
+        <p className="mb-6 rounded-2xl bg-aviso-suave px-4 py-3 text-sm font-medium text-aviso md:px-5">
           Esta cotización está aprobada. Si guardás cambios vuelve a pendiente y un admin la tiene que aprobar de
           nuevo.
         </p>
@@ -49,13 +48,13 @@ export default async function EditarCotizacionPage({
             enviar="Guardar cambios"
             enviando="Guardando…"
             redirigir={volver}
-            className="space-y-4"
+            className="space-y-5"
           >
             <input type="hidden" name="cotizacionId" value={cotizacion.id} />
             <CotizacionCampos proveedores={proveedores} dias={rubro.dias} valores={cotizacion} />
             {cotizacion.adjunto && (
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="quitarAdjunto" />
+              <label className="flex items-center gap-2.5 text-sm">
+                <input type="checkbox" name="quitarAdjunto" className="size-4 accent-black" />
                 Quitar el PDF actual (
                 <a href={`/api/adjuntos/${cotizacion.adjunto}`} target="_blank" rel="noreferrer" className="underline">
                   ver

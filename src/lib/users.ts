@@ -54,7 +54,7 @@ export async function crearUsuario(db: Db, datos: NuevoUsuario): Promise<string>
 
 export async function listarUsuarios(db: Db) {
   return db
-    .select({ id: user.id, name: user.name, email: user.email, role: user.role })
+    .select({ id: user.id, name: user.name, email: user.email, role: user.role, recibirEmails: user.recibirEmails })
     .from(user)
     .orderBy(asc(user.name));
 }

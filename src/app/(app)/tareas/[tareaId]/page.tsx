@@ -1,15 +1,16 @@
-import Link from "next/link";
+import { AlarmClock, Hand, Trash } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Campo } from "@/components/campos";
+import { Encabezado } from "@/components/encabezado";
 import { EstadoTareaBadge } from "@/components/estado-tarea";
 import { BotonAccion, FormAccion } from "@/components/form-accion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Pastilla } from "@/components/pastilla";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/db";
 import { can } from "@/lib/permissions";
 import { listarRecordatorios, puedeGestionarRecordatorios } from "@/lib/recordatorios";
-import { formatearFechaHora } from "@/lib/reminders";
+import { cuandoVence, formatearFechaHora, hoyEnLaPaz } from "@/lib/reminders";
 import { listarAreas } from "@/lib/rubros";
 import { usuarioActual } from "@/lib/session";
 import { obtenerTarea } from "@/lib/tareas";
@@ -30,6 +31,8 @@ const TIPO: Record<string, string> = {
   manual: "Manual",
 };
 
+const TONO = { Enviado: "ok", Cancelado: "neutro", Pendiente: "neutro" } as const;
+
 export default async function TareaPage({ params }: PageProps<"/tareas/[tareaId]">) {
   const usuario = await usuarioActual();
   const { tareaId } = await params;
@@ -42,112 +45,123 @@ export default async function TareaPage({ params }: PageProps<"/tareas/[tareaId]
     listarRecordatorios(db, tareaId),
   ]);
   const gestiona = puedeGestionarRecordatorios(usuario, tarea.creadoPor);
+  const creador = usuarios.find((u) => u.id === tarea.creadoPor)?.name;
+  const vence = tarea.fechaLimite
+    ? tarea.estado === "hecha"
+      ? `Vencía el ${tarea.fechaLimite.split("-").reverse().join("/")}`
+      : cuandoVence(tarea.fechaLimite, hoyEnLaPaz(new Date()))
+    : "Sin fecha límite";
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <Link href="/tareas" className="text-sm text-muted-foreground hover:underline">
-            ← Tareas
-          </Link>
-          <h1 className="text-2xl font-semibold">{tarea.titulo}</h1>
-          <div className="mt-1 flex items-center gap-2">
-            <EstadoTareaBadge estado={tarea.estado} />
-            <AccionesEstado tareaId={tareaId} estado={tarea.estado} />
-          </div>
+    <div>
+      <Encabezado
+        volver={{ href: "/tareas", texto: "Tareas" }}
+        titulo={tarea.titulo}
+        acciones={
+          can(usuario.role, "borrar") && (
+            <BotonAccion
+              accion={borrarTareaAction}
+              campos={{ tareaId }}
+              texto="Borrar"
+              enviando="Borrando…"
+              variant="destructive"
+              icono={<Trash />}
+              className="h-10"
+              confirmar
+            />
+          )
+        }
+      >
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <EstadoTareaBadge estado={tarea.estado} />
+          <span className="text-sm text-muted-foreground">
+            {vence} · {tarea.area}
+            {creador && ` · creada por ${creador}`}
+          </span>
         </div>
-        {can(usuario.role, "borrar") && (
-          <BotonAccion
-            accion={borrarTareaAction}
-            campos={{ tareaId }}
-            texto="Borrar tarea"
-            enviando="Borrando…"
-            variant="destructive"
-            confirmar
-          />
-        )}
-      </div>
+      </Encabezado>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Datos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FormAccion
-            accion={editarTareaAction}
-            enviar="Guardar cambios"
-            enviando="Guardando…"
-            exito="Guardado"
-            className="space-y-4"
-          >
-            <input type="hidden" name="tareaId" value={tareaId} />
-            <TareaCampos areas={areas} usuarios={usuarios} valores={tarea} />
-          </FormAccion>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recordatorios</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {recordatorios.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Sin recordatorios. Los automáticos se crean al poner una fecha límite.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cuándo (hora de La Paz)</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recordatorios.map((r) => {
-                  const estado = r.canceladoAt ? "Cancelado" : r.enviadoAt ? "Enviado" : "Pendiente";
-                  return (
-                    <TableRow key={r.id}>
-                      <TableCell>{formatearFechaHora(r.fechaHora)}</TableCell>
-                      <TableCell>{TIPO[r.tipoAutomatico ?? r.origen]}</TableCell>
-                      <TableCell>{estado}</TableCell>
-                      <TableCell>
-                        {gestiona && r.origen === "manual" && estado === "Pendiente" && (
-                          <BotonAccion
-                            accion={cancelarRecordatorioAction}
-                            campos={{ recordatorioId: r.id }}
-                            texto="Cancelar"
-                            enviando="Cancelando…"
-                            variant="ghost"
-                          />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-
-          {gestiona && tarea.estado !== "hecha" && (
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <Card>
+          <div className="px-(--card-spacing)">
+            <h2 className="mb-5 text-lg font-bold tracking-tight">Datos</h2>
             <FormAccion
-              accion={crearRecordatorioAction}
-              enviar="Agregar recordatorio"
-              enviando="Agregando…"
-              exito="Recordatorio agregado"
-              limpiar
-              className="flex flex-wrap items-end gap-3"
+              accion={editarTareaAction}
+              enviar="Guardar cambios"
+              enviando="Guardando…"
+              exito="Guardado"
+              className="space-y-5"
             >
               <input type="hidden" name="tareaId" value={tareaId} />
-              <Campo id="fechaHora" label="Recordatorio manual (hora de La Paz)">
-                <Input id="fechaHora" name="fechaHora" type="datetime-local" required />
-              </Campo>
+              <TareaCampos areas={areas} usuarios={usuarios} valores={tarea} />
             </FormAccion>
-          )}
-        </CardContent>
-      </Card>
+            <div className="mt-5 border-t pt-5">
+              <p className="mb-3 text-xs font-semibold tracking-[0.08em] text-tinta-3 uppercase">Estado</p>
+              <div className="[&>div]:justify-start">
+                <AccionesEstado tareaId={tareaId} estado={tarea.estado} />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="flex h-full flex-col px-(--card-spacing)">
+            <h2 className="text-lg font-bold tracking-tight">Recordatorios</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Por email y en la campanita. Hora de La Paz.</p>
+
+            {recordatorios.length === 0 ? (
+              <p className="mt-4 border-t py-6 text-sm text-muted-foreground">
+                Sin recordatorios. Los automáticos se crean al poner una fecha límite.
+              </p>
+            ) : (
+              <ul className="mt-4 divide-y border-t">
+                {recordatorios.map((r) => {
+                  const estado = r.canceladoAt ? "Cancelado" : r.enviadoAt ? "Enviado" : "Pendiente";
+                  const Icono = r.origen === "manual" ? Hand : AlarmClock;
+                  return (
+                    <li key={r.id} className="flex items-center gap-3 py-3.5">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                        <Icono className="size-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold tabular-nums">{formatearFechaHora(r.fechaHora)}</span>
+                        <span className="block text-sm text-tinta-3">{TIPO[r.tipoAutomatico ?? r.origen]}</span>
+                      </span>
+                      {gestiona && r.origen === "manual" && estado === "Pendiente" ? (
+                        <BotonAccion
+                          accion={cancelarRecordatorioAction}
+                          campos={{ recordatorioId: r.id }}
+                          texto="Cancelar"
+                          enviando="Cancelando…"
+                          variant="ghost"
+                        />
+                      ) : (
+                        <Pastilla tono={TONO[estado]}>{estado}</Pastilla>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {gestiona && tarea.estado !== "hecha" && (
+              <FormAccion
+                accion={crearRecordatorioAction}
+                enviar="Agregar recordatorio"
+                enviando="Agregando…"
+                exito="Recordatorio agregado"
+                limpiar
+                className="mt-auto space-y-3 border-t pt-5"
+              >
+                <input type="hidden" name="tareaId" value={tareaId} />
+                <Campo id="fechaHora" label="Recordatorio manual (hora de La Paz)">
+                  <Input id="fechaHora" name="fechaHora" type="datetime-local" required />
+                </Campo>
+              </FormAccion>
+            )}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

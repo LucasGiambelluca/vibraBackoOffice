@@ -6,9 +6,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const usuario = await usuarioActual();
 
   return (
-    <div className="min-h-screen md:flex">
-      <Nav nombre={usuario.name} esAdmin={can(usuario.role, "configurar")} />
-      <main className="flex-1 p-4 md:p-8">{children}</main>
+    <div className="min-h-dvh md:flex">
+      <Nav nombre={usuario.name} rol={usuario.role} esAdmin={can(usuario.role, "configurar")} />
+      <main className="min-w-0 flex-1 px-4 pt-4 pb-32 md:px-10 md:pt-9 md:pb-12">{children}</main>
     </div>
   );
 }
