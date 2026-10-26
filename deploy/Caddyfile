@@ -1,5 +1,16 @@
 # HTTPS automático (Let's Encrypt) para el dominio de DOMINIO.
 {$DOMINIO} {
 	encode zstd gzip
+	header {
+		# Solo HTTPS por un año (sin includeSubDomains: el dominio puede tener otros subdominios).
+		Strict-Transport-Security "max-age=31536000"
+		# Que nadie embeba la app en un iframe para hacer clic en aprobar/borrar por el usuario.
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-X-Powered-By
+		-Server
+	}
 	reverse_proxy app:3000
 }
