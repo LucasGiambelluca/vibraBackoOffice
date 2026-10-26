@@ -3,18 +3,18 @@ import { Input } from "@/components/ui/input";
 
 type Valores = {
   titulo: string;
-  areaId: number;
+  grupoId: number;
   responsableId: string | null;
   fechaLimite: string | null;
   notas: string | null;
 };
 
 export function TareaCampos({
-  areas,
+  grupos,
   usuarios,
   valores,
 }: {
-  areas: { id: number; nombre: string }[];
+  grupos: { id: number; nombre: string }[];
   usuarios: { id: string; name: string }[];
   valores?: Valores;
 }) {
@@ -23,14 +23,14 @@ export function TareaCampos({
       <Campo id="titulo" label="Tarea" className="sm:col-span-2">
         <Input id="titulo" name="titulo" defaultValue={valores?.titulo} required />
       </Campo>
-      <Campo id="areaId" label="Área">
-        <Select id="areaId" name="areaId" defaultValue={valores?.areaId ?? ""} required>
+      <Campo id="grupoId" label="Grupo">
+        <Select id="grupoId" name="grupoId" defaultValue={valores?.grupoId ?? ""} required>
           <option value="" disabled>
-            Elegí un área
+            Elegí un grupo
           </option>
-          {areas.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.nombre}
+          {grupos.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.nombre}
             </option>
           ))}
         </Select>

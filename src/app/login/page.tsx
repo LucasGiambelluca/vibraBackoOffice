@@ -13,9 +13,9 @@ export default async function LoginPage() {
       <section className="relative flex flex-col justify-between bg-[#0a0a0a] px-6 pt-10 pb-10 text-white lg:px-16 lg:py-14">
         <LogoRs claro className="h-12 self-start lg:h-16" />
         <div className="mt-14 lg:mt-0">
-          <p className="text-xs font-bold tracking-[0.2em] text-marca uppercase">Vibra Bolivia 2027</p>
+          <p className="text-xs font-bold tracking-[0.2em] text-marca uppercase">RS Group · Eventos</p>
           <p className="mt-4 max-w-lg font-display text-[1.875rem] leading-[1.08] font-bold tracking-[-0.03em] text-balance lg:text-[2.75rem]">
-            Todo el presupuesto y las tareas del festival, en un solo lugar.
+            Presupuestos, tareas e historial de cada evento, en un solo lugar.
           </p>
           <p className="mt-4 text-[0.9375rem] text-white/60">Back office de producción para el equipo de RS Group.</p>
         </div>

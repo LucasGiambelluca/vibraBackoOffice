@@ -21,6 +21,8 @@ export default async function ProveedorPage({ params }: PageProps<"/proveedores/
   const proveedor = await obtenerProveedor(db, proveedorId);
   if (!proveedor) notFound();
   const cotizaciones = await listarCotizaciones(db, { proveedorId });
+  // La historia del proveedor: sus cotizaciones agrupadas por evento.
+  const porEvento = [...Map.groupBy(cotizaciones, (c) => c.evento)];
 
   return (
     <div>
@@ -64,38 +66,52 @@ export default async function ProveedorPage({ params }: PageProps<"/proveedores/
 
         <Card>
           <CardHeader>
-            <CardTitle>Cotizaciones</CardTitle>
+            <CardTitle>Cotizaciones por evento</CardTitle>
           </CardHeader>
           <CardContent>
-            {cotizaciones.length === 0 ? (
+            {porEvento.length === 0 ? (
               <p className="text-sm text-muted-foreground">Este proveedor todavía no tiene cotizaciones.</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Rubro</TableHead>
-                    <TableHead className="max-sm:hidden">Descripción</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead>Estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {cotizaciones.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell>
-                        <Link href={`/presupuestos/${c.rubroId}`} className="font-semibold hover:underline">
-                          {c.rubro}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="max-w-48 truncate text-muted-foreground max-sm:hidden">{c.descripcion}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatearMonto(c.total, c.moneda)}</TableCell>
-                      <TableCell>
-                        <EstadoCotizacion estado={c.estado} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="space-y-6">
+                {porEvento.map(([evento, lista]) => (
+                  <section key={evento}>
+                    <h3 className="mb-1 font-sans text-xs font-semibold tracking-[0.08em] text-tinta-3 uppercase">
+                      {evento}
+                    </h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead>Rubro</TableHead>
+                          <TableHead className="max-sm:hidden">Descripción</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                          <TableHead>Estado</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {lista.map((c) => (
+                          <TableRow key={c.id}>
+                            <TableCell>
+                              <Link
+                                href={`/eventos/${c.eventoId}/rubros/${c.eventoRubroId}`}
+                                className="font-semibold hover:underline"
+                              >
+                                {c.rubro}
+                              </Link>
+                            </TableCell>
+                            <TableCell className="max-w-48 truncate text-muted-foreground max-sm:hidden">
+                              {c.descripcion}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">{formatearMonto(c.total, c.moneda)}</TableCell>
+                            <TableCell>
+                              <EstadoCotizacion estado={c.estado} />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </section>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>

@@ -3,7 +3,7 @@ import type { Db } from "@/db/client";
 import { aprobarCotizacion } from "@/lib/cotizaciones";
 import { guardarTipoCambio } from "@/lib/eventos";
 import { editarRubroEvento, pagoSchema, presupuestoSchema, registrarPago } from "@/lib/evento-rubros";
-import { resumenEvento } from "@/lib/resumen";
+import { desvio, resumenEvento } from "@/lib/resumen";
 import { crearDbPrueba } from "../helpers/db";
 import { idEventoRubro, idVibra, nuevaCotizacion, nuevoProveedor } from "../helpers/presupuestos";
 
@@ -62,5 +62,19 @@ describe("resumenEvento", () => {
     const a = await nuevaCotizacion(db, await idEventoRubro(db, "Sonido"), proveedor, { moneda: "USD" });
     await aprobarCotizacion(db, a);
     expect((await resumenEvento(db, vibra)).totales.aprobado).toEqual({ ars: null, faltan: ["USD"] });
+  });
+});
+
+describe("desvio", () => {
+  it("compara en ARS lo real contra el presupuesto", () => {
+    expect(desvio({ monto: 100, moneda: "USD" }, { monto: 154000, moneda: "ARS" }, { USD: 1400 })).toBeCloseTo(0.1);
+    expect(desvio({ monto: 1000, moneda: "ARS" }, { monto: 950, moneda: "ARS" }, {})).toBeCloseTo(-0.05);
+  });
+
+  it("null si falta presupuesto, lo real, un tipo de cambio o el presupuesto es 0", () => {
+    expect(desvio(null, { monto: 1, moneda: "ARS" }, {})).toBeNull();
+    expect(desvio({ monto: 1, moneda: "ARS" }, null, {})).toBeNull();
+    expect(desvio({ monto: 1, moneda: "USD" }, { monto: 1, moneda: "ARS" }, {})).toBeNull();
+    expect(desvio({ monto: 0, moneda: "ARS" }, { monto: 1, moneda: "ARS" }, {})).toBeNull();
   });
 });

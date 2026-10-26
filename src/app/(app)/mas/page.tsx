@@ -1,4 +1,4 @@
-import { Building, ChevronRight } from "lucide-react";
+import { Building, CalendarDays, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Encabezado } from "@/components/encabezado";
 import { Avatar } from "@/components/marca";
@@ -30,7 +30,12 @@ export default async function MasPage() {
           <ChevronRight className="size-5 text-tinta-3" />
         </Link>
 
-        <Grupo items={[{ href: "/proveedores", label: "Proveedores", icono: Building }]} />
+        <Grupo
+          items={[
+            { href: "/eventos", label: "Eventos", icono: CalendarDays },
+            { href: "/proveedores", label: "Proveedores", icono: Building },
+          ]}
+        />
 
         {can(usuario.role, "configurar") && (
           <section>

@@ -8,7 +8,15 @@ import { Button } from "@/components/ui/button";
 import { formatearFechaHora } from "@/lib/reminders";
 import { cn } from "@/lib/utils";
 
-type Notificacion = { id: string; mensaje: string; tareaId: string; leida: boolean; createdAt: string };
+type Notificacion = {
+  id: string;
+  mensaje: string;
+  tareaId: string;
+  eventoId: string;
+  evento: string;
+  leida: boolean;
+  createdAt: string;
+};
 type Datos = { noLeidas: number; items: Notificacion[] };
 
 function formulario(campos: Record<string, string> = {}): FormData {
@@ -48,7 +56,7 @@ export function Campanita() {
       // Que no marcarla como leída no impida abrir la tarea.
       console.error("No se pudo marcar la notificación como leída", error);
     }
-    router.push(`/tareas/${n.tareaId}`);
+    router.push(`/eventos/${n.eventoId}/tareas/${n.tareaId}`);
     void cargar();
   }
 
@@ -109,7 +117,7 @@ export function Campanita() {
                       <span className={cn("min-w-0 flex-1", !n.leida && "font-semibold")}>
                         {n.mensaje}
                         <span className="mt-0.5 block text-xs font-normal text-tinta-3">
-                          {formatearFechaHora(new Date(n.createdAt))}
+                          {n.evento} · {formatearFechaHora(new Date(n.createdAt))}
                         </span>
                       </span>
                     </button>

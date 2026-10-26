@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Encabezado } from "@/components/encabezado";
 import { FormAccion } from "@/components/form-accion";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,24 +6,28 @@ import { db } from "@/db";
 import { obtenerCotizacion } from "@/lib/cotizaciones";
 import { can } from "@/lib/permissions";
 import { listarProveedores } from "@/lib/proveedores";
-import { obtenerRubro } from "@/lib/rubros";
+import { obtenerEventoRubro } from "@/lib/evento-rubros";
 import { usuarioActual } from "@/lib/session";
-import { editarCotizacionAction } from "../../actions";
-import { CotizacionCampos } from "../../cotizacion-campos";
+import { editarCotizacionAction } from "../../../../../presupuestos/actions";
+import { CotizacionCampos } from "../../../../../presupuestos/cotizacion-campos";
+import { cargarEvento } from "../../../evento";
 
 export default async function EditarCotizacionPage({
   params,
-}: PageProps<"/presupuestos/[rubroId]/[cotizacionId]">) {
+}: PageProps<"/eventos/[eventoId]/rubros/[eventoRubroId]/[cotizacionId]">) {
   const usuario = await usuarioActual();
-  const { rubroId, cotizacionId } = await params;
-  const [cotizacion, rubro, proveedores] = await Promise.all([
+  const { eventoId, eventoRubroId, cotizacionId } = await params;
+  const [evento, cotizacion, rubro, proveedores] = await Promise.all([
+    cargarEvento(eventoId),
     obtenerCotizacion(db, cotizacionId),
-    obtenerRubro(db, rubroId),
+    obtenerEventoRubro(db, eventoRubroId),
     listarProveedores(db),
   ]);
-  if (!cotizacion || !rubro || cotizacion.rubroId !== rubroId) notFound();
+  if (!cotizacion || !rubro || cotizacion.eventoRubroId !== eventoRubroId || rubro.eventoId !== eventoId) notFound();
 
-  const volver = `/presupuestos/${rubroId}`;
+  const volver = `/eventos/${eventoId}/rubros/${eventoRubroId}`;
+  // Un evento cerrado es solo lectura: no hay nada que editar.
+  if (evento.cerrado) redirect(volver);
   const pierdeAprobacion = cotizacion.estado === "aprobada" && !can(usuario.role, "aprobar");
 
   return (
@@ -31,7 +35,7 @@ export default async function EditarCotizacionPage({
       <Encabezado
         volver={{ href: volver, texto: rubro.nombre }}
         titulo="Editar cotización"
-        bajada={`${proveedores.find((p) => p.id === cotizacion.proveedorId)?.nombre ?? ""} · ${rubro.area}`}
+        bajada={`${proveedores.find((p) => p.id === cotizacion.proveedorId)?.nombre ?? ""} · ${rubro.grupo}`}
       />
 
       {pierdeAprobacion && (

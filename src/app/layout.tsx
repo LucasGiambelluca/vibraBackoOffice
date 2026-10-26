@@ -14,8 +14,8 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
-  title: "Vibra 2027 — Back office",
-  description: "Presupuestos y tareas de producción de Vibra Bolivia 2027",
+  title: "RS Group — Back office de eventos",
+  description: "Presupuestos, tareas e historial de los eventos de RS Group",
 };
 
 export const viewport: Viewport = {

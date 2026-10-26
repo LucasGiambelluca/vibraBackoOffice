@@ -4,13 +4,25 @@ import { eventoRubro, rubro } from "@/db/schema";
 import { listarCotizaciones, type CotizacionListada } from "@/lib/cotizaciones";
 import { obtenerTiposCambio } from "@/lib/eventos";
 import { listarGrupos } from "@/lib/grupos";
-import { totalEnArs, type Moneda } from "@/lib/money";
+import { aArs, totalEnArs, type Moneda, type TiposCambio } from "@/lib/money";
 
 export type Monto = { monto: number; moneda: Moneda };
 
 /** Monto guardado como numeric + moneda, o null si no se cargó. */
 function monto(valor: string | null, moneda: string | null): Monto | null {
   return valor === null || moneda === null ? null : { monto: Number(valor), moneda: moneda as Moneda };
+}
+
+/**
+ * Cuánto se apartó lo real (pagado, o aprobado si todavía no se pagó) del presupuesto:
+ * 0.1 = 10 % más caro, -0.05 = 5 % más barato. null si falta algún dato para comparar.
+ */
+export function desvio(presupuesto: Monto | null, real: Monto | null, tipos: TiposCambio): number | null {
+  if (!presupuesto || !real) return null;
+  const base = aArs(presupuesto.monto, presupuesto.moneda, tipos);
+  const final = aArs(real.monto, real.moneda, tipos);
+  if (base === null || final === null || base === 0) return null;
+  return (final - base) / base;
 }
 
 /**
