@@ -80,6 +80,13 @@ export function totalEnArs(montos: { monto: number; moneda: Moneda }[], tipos: T
 
 const FORMATO = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const COMPACTO = new Intl.NumberFormat("es-AR", { notation: "compact", maximumFractionDigits: 1 });
+
+/** "ARS 3,6 M": para resúmenes donde no entra el monto completo. */
+export function formatearCompacto(monto: number, moneda: Moneda): string {
+  return `${moneda} ${COMPACTO.format(monto)}`;
+}
+
 export function formatearMonto(monto: number, moneda: Moneda): string {
   return `${moneda} ${FORMATO.format(monto)}`;
 }

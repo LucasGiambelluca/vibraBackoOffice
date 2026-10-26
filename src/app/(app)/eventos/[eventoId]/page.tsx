@@ -45,12 +45,12 @@ export default async function EventoPage({ params, searchParams }: PageProps<"/e
 
       <section className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-border ring-1 ring-border lg:grid-cols-4">
         {cifras.map((c, i) => (
-          <div key={c.titulo} className={cn("bg-card px-5 py-4 md:px-6 md:py-5", i === 0 && "max-lg:col-span-2")}>
+          <div key={c.titulo} className={cn("min-w-0 bg-card px-5 py-4 md:px-6 md:py-5", i === 0 && "max-lg:col-span-2")}>
             <p className="text-xs text-tinta-3">{c.titulo}</p>
             <p
               className={cn(
-                "mt-1 truncate font-display font-bold tracking-tight tabular-nums",
-                c.total.ars === null ? "text-sm text-peligro" : "text-lg md:text-xl",
+                "mt-1 font-display font-bold tracking-tight break-words tabular-nums",
+                c.total.ars === null ? "text-sm text-peligro" : "text-base sm:text-lg md:text-xl",
               )}
             >
               {textoTotal(c.total)}
@@ -58,7 +58,7 @@ export default async function EventoPage({ params, searchParams }: PageProps<"/e
             <p className="text-xs text-tinta-3 tabular-nums">{textoUsd(c.total.ars, tipos) ?? " "}</p>
           </div>
         ))}
-        <div className="bg-card px-5 py-4 md:px-6 md:py-5">
+        <div className="bg-card px-5 py-4 max-lg:col-span-2 md:px-6 md:py-5">
           <p className="text-xs text-tinta-3">Rubros sin aprobar</p>
           <p className="mt-1 font-display text-lg font-bold tracking-tight text-marca-tinta md:text-xl">
             {sinAprobar} de {todos.length}

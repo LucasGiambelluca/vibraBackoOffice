@@ -382,14 +382,14 @@ function PresupuestoYPago({
       </div>
       {editable && (
         <div className="flex flex-wrap gap-2 border-t px-4 py-3">
-          <Hoja boton="Presupuesto" titulo={`Presupuesto · ${rubro.nombre}`}>
+          <Hoja boton="Editar presupuesto" titulo={`Presupuesto · ${rubro.nombre}`} secundario>
             <FormAccion accion={editarRubroEventoAction} enviar="Guardar" enviando="Guardando…" className="space-y-5">
               <input type="hidden" name="eventoRubroId" value={rubro.id} />
               <div className="grid gap-4 sm:grid-cols-3">
                 <Campo id="presupuesto" label="Presupuesto objetivo" ayuda="Vacío = sin presupuesto" className="sm:col-span-2">
                   <Input id="presupuesto" name="presupuesto" inputMode="decimal" defaultValue={rubro.presupuesto ?? ""} />
                 </Campo>
-                <Campo id="presupuestoMoneda" label="Moneda">
+                <Campo id="presupuestoMoneda" label="Moneda del presupuesto">
                   <Select id="presupuestoMoneda" name="presupuestoMoneda" defaultValue={rubro.presupuestoMoneda ?? "ARS"}>
                     {MONEDAS.map((m) => (
                       <option key={m}>{m}</option>
@@ -405,14 +405,14 @@ function PresupuestoYPago({
               </div>
             </FormAccion>
           </Hoja>
-          <Hoja boton="Registrar pago" titulo={`Pago · ${rubro.nombre}`}>
+          <Hoja boton="Registrar pago" titulo={`Pago · ${rubro.nombre}`} secundario>
             <FormAccion accion={registrarPagoAction} enviar="Guardar pago" enviando="Guardando…" className="space-y-5">
               <input type="hidden" name="eventoRubroId" value={rubro.id} />
               <div className="grid gap-4 sm:grid-cols-3">
                 <Campo id="pagado" label="Monto pagado" ayuda="Vacío = todavía no se pagó" className="sm:col-span-2">
                   <Input id="pagado" name="pagado" inputMode="decimal" defaultValue={rubro.pagado ?? ""} />
                 </Campo>
-                <Campo id="pagadoMoneda" label="Moneda">
+                <Campo id="pagadoMoneda" label="Moneda del pago">
                   <Select id="pagadoMoneda" name="pagadoMoneda" defaultValue={rubro.pagadoMoneda ?? aprobada?.moneda ?? "ARS"}>
                     {MONEDAS.map((m) => (
                       <option key={m}>{m}</option>

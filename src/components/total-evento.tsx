@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { textoTotal, textoUsd } from "@/components/montos";
+import { textoTotal, textoTotalCompacto, textoUsd } from "@/components/montos";
 import type { TiposCambio } from "@/lib/money";
 import type { ResumenEvento } from "@/lib/resumen";
 import { cn } from "@/lib/utils";
@@ -36,17 +36,17 @@ export function TotalEventoCard({
         destacado ? "bg-[#0a0a0a] text-white" : "bg-card ring-1 ring-border hover:shadow-[0_8px_24px_rgb(0_0_0/0.08)]",
       )}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           {/* Toda la tarjeta lleva al evento, pero el nombre accesible es solo el del evento. */}
-          <h2 className="truncate font-display text-xl font-bold tracking-tight group-hover:underline">
+          <h2 className="line-clamp-2 font-display text-xl font-bold tracking-tight text-balance group-hover:underline">
             <Link href={`/eventos/${id}`} className="after:absolute after:inset-0">
               {nombre}
             </Link>
           </h2>
           {datos && <p className={cn("mt-0.5 text-sm", destacado ? "text-white/55" : "text-tinta-3")}>{datos}</p>}
         </div>
-        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-marca-suave px-3 text-xs font-semibold text-marca-tinta max-sm:hidden">
+        <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-marca-suave px-3 text-xs font-semibold whitespace-nowrap text-marca-tinta max-sm:hidden">
           <span aria-hidden className="size-1.5 rounded-full bg-current" />
           {aprobados} de {rubros} rubros
         </span>
@@ -80,8 +80,8 @@ export function TotalEventoCard({
           )}
         >
           {[
-            { titulo: "Presupuestado", valor: textoTotal(totales.presupuesto) },
-            { titulo: "Pagado", valor: textoTotal(totales.pagado) },
+            { titulo: "Presupuestado", valor: textoTotalCompacto(totales.presupuesto) },
+            { titulo: "Pagado", valor: textoTotalCompacto(totales.pagado) },
             { titulo: "Tareas vencidas", valor: String(vencidas) },
           ].map((c) => (
             <div key={c.titulo} className="min-w-0">

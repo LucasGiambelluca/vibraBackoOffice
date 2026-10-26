@@ -4,6 +4,7 @@ import {
   ahorroCotizacion,
   desdeArs,
   esMoneda,
+  formatearCompacto,
   formatearMonto,
   totalCotizacion,
   totalEnArs,
@@ -135,6 +136,11 @@ describe("formato", () => {
   it("formatea con separadores de Argentina", () => {
     expect(formatearMonto(1234.5, "ARS")).toBe("ARS 1.234,50");
     expect(formatearMonto(18900000, "ARS")).toBe("ARS 18.900.000,00");
+  });
+
+  it("formato compacto para resúmenes", () => {
+    expect(formatearCompacto(3600000, "ARS")).toBe("ARS 3,6 M");
+    expect(formatearCompacto(950, "ARS")).toBe("ARS 950");
   });
 
   it("esMoneda", () => {

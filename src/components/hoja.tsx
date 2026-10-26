@@ -19,11 +19,14 @@ export function Hoja({
   boton,
   titulo,
   abierta = false,
+  secundario = false,
   children,
 }: {
   boton: string;
   titulo: string;
   abierta?: boolean;
+  /** Botón con borde y con el texto también en el celular (para acciones que no son la principal). */
+  secundario?: boolean;
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -43,14 +46,20 @@ export function Hoja({
 
   return (
     <>
-      <Button
-        onClick={abrir}
-        aria-label={boton}
-        className="size-11 rounded-full px-0 md:h-10 md:w-auto md:rounded-xl md:px-4"
-      >
-        <Plus className="size-5 md:size-4" />
-        <span className="max-md:hidden">{boton}</span>
-      </Button>
+      {secundario ? (
+        <Button variant="outline" onClick={abrir}>
+          {boton}
+        </Button>
+      ) : (
+        <Button
+          onClick={abrir}
+          aria-label={boton}
+          className="size-11 rounded-full px-0 md:h-10 md:w-auto md:rounded-xl md:px-4"
+        >
+          <Plus className="size-5 md:size-4" />
+          <span className="max-md:hidden">{boton}</span>
+        </Button>
+      )}
       <dialog
         ref={ref}
         aria-label={titulo}
