@@ -1,9 +1,8 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
-import { useRef, useState, useTransition } from "react";
+import { LoaderCircle } from "lucide-react";
+import { useState, useTransition } from "react";
 import { Campo } from "@/components/campos";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TIPOS_ACEPTADOS } from "@/lib/limites";
 import { leerPdfAction } from "./actions";
@@ -19,18 +18,13 @@ function completar(form: HTMLFormElement, nombre: string, valor: string | null) 
 
 /**
  * El archivo del proveedor al cargar una cotización. Si es un PDF y hay IA configurada,
- * "Completar desde el PDF" lo lee y llena el formulario para revisar.
+ * se lee apenas se elige y llena el formulario para revisar.
  */
 export function AdjuntoCotizacion({ eventoRubroId, conLectura }: { eventoRubroId: string; conLectura: boolean }) {
-  const input = useRef<HTMLInputElement>(null);
-  const [esPdf, setEsPdf] = useState(false);
   const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null);
   const [leyendo, startTransition] = useTransition();
 
-  function leer() {
-    const archivo = input.current?.files?.[0];
-    const form = input.current?.form;
-    if (!archivo || !form) return;
+  function leer(archivo: File, form: HTMLFormElement) {
     const datos = new FormData();
     datos.set("adjunto", archivo);
     datos.set("eventoRubroId", eventoRubroId);
@@ -57,24 +51,25 @@ export function AdjuntoCotizacion({ eventoRubroId, conLectura }: { eventoRubroId
     <div className="space-y-2">
       <Campo id="adjunto" label="PDF o foto de la cotización (opcional, hasta 10 MB)">
         <Input
-          ref={input}
           id="adjunto"
           name="adjunto"
           type="file"
           accept={TIPOS_ACEPTADOS.join(",")}
           onChange={(e) => {
-            setEsPdf(e.currentTarget.files?.[0]?.type === "application/pdf");
+            const archivo = e.currentTarget.files?.[0];
+            const form = e.currentTarget.form;
             setMensaje(null);
+            if (conLectura && archivo?.type === "application/pdf" && form) leer(archivo, form);
           }}
         />
       </Campo>
-      {conLectura && esPdf && (
-        <Button type="button" variant="outline" onClick={leer} disabled={leyendo}>
-          <Sparkles />
-          {leyendo ? "Leyendo el PDF…" : "Completar desde el PDF"}
-        </Button>
+      {leyendo && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+          <LoaderCircle className="size-4 animate-spin" />
+          Leyendo el PDF y completando los datos…
+        </p>
       )}
-      {mensaje && (
+      {!leyendo && mensaje && (
         <p className={mensaje.ok ? "text-sm text-muted-foreground" : "text-sm text-destructive"} role="status">
           {mensaje.texto}
         </p>
