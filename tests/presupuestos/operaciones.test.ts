@@ -13,12 +13,12 @@ import { listarCotizaciones, obtenerCotizacion } from "@/lib/cotizaciones";
 import type { Actor } from "@/lib/permissions";
 import { crearActores, SIN_PERMISO } from "../helpers/actores";
 import { crearDbPrueba } from "../helpers/db";
-import { COTIZACION, idRubro, nuevaCotizacion, nuevoProveedor, pdf, usarUploadsTemporal } from "../helpers/presupuestos";
+import { COTIZACION, idEventoRubro, nuevaCotizacion, nuevoProveedor, pdf, usarUploadsTemporal } from "../helpers/presupuestos";
 
 let db: Db;
 let admin: Actor;
 let editor: Actor;
-let rubroId: string;
+let eventoRubroId: string;
 let proveedorId: string;
 let uploads: string;
 
@@ -26,36 +26,36 @@ beforeEach(async () => {
   uploads = usarUploadsTemporal();
   db = await crearDbPrueba();
   ({ admin, editor } = await crearActores(db));
-  rubroId = await idRubro(db);
+  eventoRubroId = await idEventoRubro(db);
   proveedorId = await nuevoProveedor(db);
 });
 
 describe("altaCotizacion", () => {
   it("el editor crea una cotización con PDF y queda como creador", async () => {
-    const datos = { ...COTIZACION, rubroId, proveedorId, adjunto: pdf() };
+    const datos = { ...COTIZACION, eventoRubroId, proveedorId, adjunto: pdf() };
     expect(await altaCotizacion(db, editor, datos)).toEqual({ ok: true });
-    const [c] = await listarCotizaciones(db, { rubroId });
+    const [c] = await listarCotizaciones(db, { eventoRubroId });
     const fila = await obtenerCotizacion(db, c.id);
     expect(fila).toMatchObject({ creadoPor: editor.id, estado: "pendiente" });
     expect(readdirSync(uploads)).toEqual([fila!.adjunto]);
   });
 
   it("un adjunto que no es PDF vuelve como error y no crea nada", async () => {
-    const datos = { ...COTIZACION, rubroId, proveedorId, adjunto: new File(["hola"], "x.pdf") };
+    const datos = { ...COTIZACION, eventoRubroId, proveedorId, adjunto: new File(["hola"], "x.pdf") };
     expect(await altaCotizacion(db, editor, datos)).toEqual({ ok: false, error: "El adjunto debe ser un PDF" });
     expect(await listarCotizaciones(db)).toHaveLength(0);
   });
 
   it("si la cotización no se puede guardar, no queda el PDF", async () => {
-    const datos = { ...COTIZACION, rubroId: "no-existe", proveedorId, adjunto: pdf() };
-    expect(await altaCotizacion(db, editor, datos)).toEqual({ ok: false, error: "Rubro o proveedor inválido" });
+    const datos = { ...COTIZACION, eventoRubroId: "no-existe", proveedorId, adjunto: pdf() };
+    expect(await altaCotizacion(db, editor, datos)).toEqual({ ok: false, error: "Rubro inválido" });
     expect(readdirSync(uploads)).toEqual([]);
   });
 });
 
 describe("edicionCotizacion", () => {
   it("cambia datos y puede quitar el adjunto", async () => {
-    await altaCotizacion(db, editor, { ...COTIZACION, rubroId, proveedorId, adjunto: pdf() });
+    await altaCotizacion(db, editor, { ...COTIZACION, eventoRubroId, proveedorId, adjunto: pdf() });
     const [c] = await listarCotizaciones(db);
     const cambios = { ...COTIZACION, cotizacionId: c.id, proveedorId, precioDia: "900", quitarAdjunto: "on" };
     expect(await edicionCotizacion(db, editor, cambios)).toEqual({ ok: true });
@@ -64,7 +64,7 @@ describe("edicionCotizacion", () => {
   });
 
   it("si el PDF anterior no se puede borrar, igual queda el nuevo", async () => {
-    await altaCotizacion(db, editor, { ...COTIZACION, rubroId, proveedorId, adjunto: pdf() });
+    await altaCotizacion(db, editor, { ...COTIZACION, eventoRubroId, proveedorId, adjunto: pdf() });
     const [c] = await listarCotizaciones(db);
     // Una carpeta con el nombre del PDF viejo hace fallar su borrado (como un EBUSY en Windows).
     rmSync(path.join(uploads, c.adjunto!));
@@ -85,7 +85,7 @@ describe("edición de una cotización aprobada", () => {
     edicionCotizacion(db, actor, { ...COTIZACION, cotizacionId, proveedorId, precioDia: "900" });
 
   it("si la edita un editor, vuelve a pendiente hasta que el admin la apruebe de nuevo", async () => {
-    const id = await nuevaCotizacion(db, rubroId, proveedorId);
+    const id = await nuevaCotizacion(db, eventoRubroId, proveedorId);
     await aprobacion(db, admin, { cotizacionId: id });
     expect(await editar(editor, id)).toEqual({ ok: true });
     expect(await obtenerCotizacion(db, id)).toMatchObject({
@@ -97,15 +97,15 @@ describe("edición de una cotización aprobada", () => {
   });
 
   it("si la edita el admin, sigue aprobada", async () => {
-    const id = await nuevaCotizacion(db, rubroId, proveedorId);
+    const id = await nuevaCotizacion(db, eventoRubroId, proveedorId);
     await aprobacion(db, admin, { cotizacionId: id });
     expect(await editar(admin, id)).toEqual({ ok: true });
     expect(await obtenerCotizacion(db, id)).toMatchObject({ estado: "aprobada", aprobadaPor: admin.id });
   });
 
   it("el editor puede editar una descartada sin cambiarle el estado", async () => {
-    const a = await nuevaCotizacion(db, rubroId, proveedorId);
-    const b = await nuevaCotizacion(db, rubroId, proveedorId);
+    const a = await nuevaCotizacion(db, eventoRubroId, proveedorId);
+    const b = await nuevaCotizacion(db, eventoRubroId, proveedorId);
     await aprobacion(db, admin, { cotizacionId: a });
     expect(await editar(editor, b)).toEqual({ ok: true });
     expect((await obtenerCotizacion(db, b))?.estado).toBe("descartada");
@@ -114,7 +114,7 @@ describe("edición de una cotización aprobada", () => {
 
 describe("aprobación y borrado", () => {
   it("el editor no puede aprobar, revertir ni borrar", async () => {
-    const id = await nuevaCotizacion(db, rubroId, proveedorId);
+    const id = await nuevaCotizacion(db, eventoRubroId, proveedorId);
     expect(await aprobacion(db, editor, { cotizacionId: id })).toEqual(SIN_PERMISO);
     expect(await reversion(db, editor, { cotizacionId: id })).toEqual(SIN_PERMISO);
     expect(await bajaCotizacion(db, editor, { cotizacionId: id })).toEqual(SIN_PERMISO);
@@ -122,7 +122,7 @@ describe("aprobación y borrado", () => {
   });
 
   it("el admin aprueba, revierte y borra", async () => {
-    const id = await nuevaCotizacion(db, rubroId, proveedorId);
+    const id = await nuevaCotizacion(db, eventoRubroId, proveedorId);
     expect(await aprobacion(db, admin, { cotizacionId: id })).toEqual({ ok: true });
     expect(await obtenerCotizacion(db, id)).toMatchObject({ estado: "aprobada", aprobadaPor: admin.id });
     expect(await reversion(db, admin, { cotizacionId: id })).toEqual({ ok: true });

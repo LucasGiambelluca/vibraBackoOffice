@@ -3,14 +3,22 @@ import type { Db } from "@/db/client";
 import { intentar, validar, type Resultado } from "@/lib/acciones";
 import { exigir, type Actor } from "@/lib/permissions";
 import { cancelarRecordatorio, crearRecordatorioManual, recordatorioManualSchema } from "@/lib/recordatorios";
-import { borrarTarea, cambiarEstadoTarea, crearTarea, editarTarea, ESTADOS_TAREA, tareaSchema } from "@/lib/tareas";
+import {
+  borrarTarea,
+  cambiarEstadoTarea,
+  crearTarea,
+  editarTarea,
+  ESTADOS_TAREA,
+  nuevaTareaSchema,
+  tareaSchema,
+} from "@/lib/tareas";
 
 const tareaId = z.string("Tarea inválida").min(1, "Tarea inválida");
 
 export function altaTarea(db: Db, actor: Actor, datos: unknown): Promise<Resultado> {
   return intentar(async () => {
     exigir(actor, "editar");
-    await crearTarea(db, validar(tareaSchema, datos), actor.id);
+    await crearTarea(db, validar(nuevaTareaSchema, datos), actor.id);
   });
 }
 

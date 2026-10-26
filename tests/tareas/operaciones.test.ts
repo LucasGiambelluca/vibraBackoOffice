@@ -13,6 +13,7 @@ import { listarRecordatorios } from "@/lib/recordatorios";
 import { listarTareas, obtenerTarea } from "@/lib/tareas";
 import { crearActores, SIN_PERMISO } from "../helpers/actores";
 import { crearDbPrueba } from "../helpers/db";
+import { idVibra } from "../helpers/presupuestos";
 import { nuevaTarea, TAREA } from "../helpers/tareas";
 
 let db: Db;
@@ -25,7 +26,7 @@ beforeEach(async () => {
 
 describe("tareas", () => {
   it("el editor crea, edita y cambia el estado; queda como creador", async () => {
-    expect(await altaTarea(db, editor, TAREA)).toEqual({ ok: true });
+    expect(await altaTarea(db, editor, { ...TAREA, eventoId: await idVibra(db) })).toEqual({ ok: true });
     const [t] = await listarTareas(db);
     expect(t.creadoPor).toBe(editor.id);
     expect(await edicionTarea(db, editor, { ...TAREA, tareaId: t.id, titulo: "Vallas freestanding" })).toEqual({
@@ -43,7 +44,7 @@ describe("tareas", () => {
   });
 
   it("errores de validación vuelven como Resultado", async () => {
-    expect(await altaTarea(db, editor, { ...TAREA, fechaLimite: "ayer" })).toEqual({
+    expect(await altaTarea(db, editor, { ...TAREA, eventoId: await idVibra(db), fechaLimite: "ayer" })).toEqual({
       ok: false,
       error: "Fecha inválida",
     });
