@@ -44,7 +44,6 @@ Tabla `archivo`:
 | tarea_id | text → tarea (cascade) | dueño opcional |
 | tipo | text `pdf` \| `imagen` | check |
 | nombre | text not null | nombre original, para mostrar y descargar |
-| descripcion | text | opcional |
 | guardado | text not null unique | nombre en `UPLOADS_DIR` (`<uuid>.pdf` / `<uuid>.jpg`…) |
 | miniatura | text | solo imágenes (`<uuid>-min.webp`) |
 | bytes | integer | null en los migrados |
@@ -66,7 +65,7 @@ de la cotización (`nombre` = "Cotización.pdf", `evento_id` por join, `subido_p
 
 - `src/lib/archivos-disco.ts` (reemplaza `adjuntos.ts`): validar por contenido (firma `%PDF-`
   o decodificar con sharp), guardar, leer, borrar sin fallar, nombres validados por regex.
-- `src/lib/archivos.ts`: `subirArchivo`, `borrarArchivo`, `editarDescripcion`,
+- `src/lib/archivos.ts`: `subirArchivo`, `borrarArchivo`,
   `listarArchivos({ dueño })`, `listarArchivosEvento(eventoId)`, `archivosDeDueños` para
   cascadas. Usa `asegurarEventoAbierto`.
 - `src/app/(app)/archivos/operaciones.ts` + `actions.ts`: un archivo por llamada (el cliente

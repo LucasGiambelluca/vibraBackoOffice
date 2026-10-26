@@ -1,6 +1,6 @@
 import { Segmentos } from "@/components/segmentos";
 
-export type SeccionEvento = "presupuesto" | "tareas" | "ajustes";
+export type SeccionEvento = "presupuesto" | "tareas" | "archivos" | "ajustes";
 
 /** Las secciones de un evento. Ajustes es solo para admins. */
 export function PestanasEvento({
@@ -17,6 +17,7 @@ export function PestanasEvento({
   const items = [
     { href: `/eventos/${eventoId}`, texto: "Presupuesto", activo: activa === "presupuesto" },
     { href: `/eventos/${eventoId}/tareas`, texto: "Tareas", activo: activa === "tareas" },
+    { href: `/eventos/${eventoId}/archivos`, texto: "Archivos", activo: activa === "archivos" },
     ...(esAdmin ? [{ href: `/eventos/${eventoId}/ajustes`, texto: "Ajustes", activo: activa === "ajustes" }] : []),
   ];
   return <Segmentos etiqueta="Secciones del evento" items={items} className={className} />;

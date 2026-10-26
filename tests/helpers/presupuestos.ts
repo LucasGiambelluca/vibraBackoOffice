@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { and, eq } from "drizzle-orm";
+import sharp from "sharp";
 import type { Db } from "@/db/client";
 import { evento, eventoRubro, rubro } from "@/db/schema";
 import { crearCotizacion, nuevaCotizacionSchema } from "@/lib/cotizaciones";
@@ -9,6 +10,20 @@ import { crearProveedor, proveedorSchema } from "@/lib/proveedores";
 
 /** Un PDF mínimo (alcanza con la firma `%PDF-`). */
 export const pdf = (contenido = "%PDF-1.4 prueba") => new File([contenido], "cotizacion.pdf", { type: "application/pdf" });
+
+/** Una foto de verdad (sharp la tiene que poder abrir). Con `orientacion`, lleva EXIF como las de un celular. */
+export async function foto({
+  ancho = 40,
+  alto = 30,
+  formato = "jpeg",
+  orientacion,
+}: { ancho?: number; alto?: number; formato?: "jpeg" | "png"; orientacion?: number } = {}): Promise<File> {
+  let imagen = sharp({ create: { width: ancho, height: alto, channels: 3, background: "#d4ff3a" } });
+  if (orientacion) imagen = imagen.withMetadata({ orientation: orientacion }).withExif({ IFD0: { Copyright: "Vibra" } });
+  const bytes = await imagen.toFormat(formato).toBuffer();
+  const tipo = formato === "png" ? "image/png" : "image/jpeg";
+  return new File([new Uint8Array(bytes)], `foto.${formato === "png" ? "png" : "jpg"}`, { type: tipo });
+}
 
 /** Apunta UPLOADS_DIR a una carpeta temporal nueva y la devuelve. */
 export function usarUploadsTemporal(): string {

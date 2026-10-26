@@ -55,9 +55,6 @@ export function CotizacionCampos({
       ) : (
         <input type="hidden" name="descuento2Dias" value={valores?.descuento2Dias ?? "0"} />
       )}
-      <Campo id="adjunto" label="Cotización en PDF (opcional, hasta 10 MB)" className="sm:col-span-2">
-        <Input id="adjunto" name="adjunto" type="file" accept="application/pdf" />
-      </Campo>
     </div>
   );
 }

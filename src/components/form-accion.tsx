@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { useCerrarHoja } from "@/components/hoja";
 import { Button } from "@/components/ui/button";
 import type { Resultado } from "@/lib/acciones";
-import { MAX_ADJUNTO } from "@/lib/limites";
+import { MAX_ARCHIVO, TIPOS_ACEPTADOS } from "@/lib/limites";
 
 export type AccionFormulario = (formData: FormData) => Promise<Resultado>;
 
@@ -26,12 +26,12 @@ function useAccion(accion: AccionFormulario, redirigir?: string) {
 
   function enviar(form: HTMLFormElement, alTerminar?: (resultado: Resultado) => void) {
     const datos = new FormData(form);
-    // Un input file vacío llega como File de tamaño 0: no es un adjunto.
+    // Un input file vacío llega como File de tamaño 0: no es un archivo.
     const archivos = [...datos.values()].filter((v): v is File => v instanceof File && v.size > 0);
-    const error = archivos.some((v) => v.type !== "application/pdf")
-      ? "El adjunto debe ser un PDF"
-      : archivos.some((v) => v.size > MAX_ADJUNTO)
-        ? "El adjunto supera los 10 MB"
+    const error = archivos.some((v) => !TIPOS_ACEPTADOS.includes(v.type))
+      ? "Solo se aceptan PDF o fotos (JPG, PNG o WebP)"
+      : archivos.some((v) => v.size > MAX_ARCHIVO)
+        ? "El archivo supera los 10 MB"
         : null;
     if (error) {
       setEstado({ ok: false, error });

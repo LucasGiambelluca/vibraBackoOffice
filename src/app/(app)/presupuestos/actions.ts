@@ -1,7 +1,9 @@
 "use server";
 
+import { db } from "@/db";
+import { usuarioActual } from "@/lib/session";
 import { ejecutar } from "../ejecutar";
-import { altaCotizacion, aprobacion, bajaCotizacion, edicionCotizacion, reversion } from "./operaciones";
+import { altaCotizacion, aprobacion, bajaCotizacion, edicionCotizacion, lecturaPdf, reversion } from "./operaciones";
 
 export async function crearCotizacionAction(formData: FormData) {
   return ejecutar(altaCotizacion, formData);
@@ -21,4 +23,8 @@ export async function revertirAprobacionAction(formData: FormData) {
 
 export async function borrarCotizacionAction(formData: FormData) {
   return ejecutar(bajaCotizacion, formData);
+}
+
+export async function leerPdfAction(formData: FormData) {
+  return lecturaPdf(db, await usuarioActual(), Object.fromEntries(formData));
 }

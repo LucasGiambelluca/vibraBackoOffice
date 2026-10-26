@@ -1,5 +1,6 @@
 import { AlarmClock, Hand, Trash } from "lucide-react";
 import { notFound } from "next/navigation";
+import { SeccionArchivos } from "@/components/archivos/seccion-archivos";
 import { Campo } from "@/components/campos";
 import { Encabezado } from "@/components/encabezado";
 import { EstadoTareaBadge } from "@/components/estado-tarea";
@@ -183,6 +184,8 @@ export default async function TareaPage({ params }: PageProps<"/eventos/[eventoI
           </div>
         </Card>
       </div>
+
+      <SeccionArchivos duenio={{ tipo: "tarea", id: tareaId }} actor={usuario} abierto={abierto} className="mt-5" />
     </div>
   );
 }

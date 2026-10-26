@@ -1,7 +1,8 @@
-import { Check, Ellipsis, FileText, Info, RotateCcw, TrendingDown } from "lucide-react";
+import { Check, Ellipsis, FileText, Image as ImageIcon, Info, RotateCcw, TrendingDown } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Campo, Select } from "@/components/campos";
+import { SeccionArchivos } from "@/components/archivos/seccion-archivos";
 import { Encabezado } from "@/components/encabezado";
 import { EstadoCotizacion } from "@/components/estado-cotizacion";
 import { BotonAccion, FormAccion } from "@/components/form-accion";
@@ -11,9 +12,11 @@ import { Pastilla } from "@/components/pastilla";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { db } from "@/db";
+import { archivosPorCotizacion, type ArchivoListado } from "@/lib/archivos";
 import { idMasBarata, listarCotizaciones, type CotizacionListada } from "@/lib/cotizaciones";
 import { obtenerEventoRubro } from "@/lib/evento-rubros";
 import { obtenerTiposCambio } from "@/lib/eventos";
+import { hayLecturaPdf } from "@/lib/lectura-pdf";
 import { formatearMonto, MONEDAS } from "@/lib/money";
 import { can } from "@/lib/permissions";
 import { listarProveedores } from "@/lib/proveedores";
@@ -27,6 +30,7 @@ import {
   crearCotizacionAction,
   revertirAprobacionAction,
 } from "../../../../presupuestos/actions";
+import { AdjuntoCotizacion } from "../../../../presupuestos/adjunto-cotizacion";
 import { CotizacionCampos } from "../../../../presupuestos/cotizacion-campos";
 import { editarRubroEventoAction, registrarPagoAction } from "../../../actions";
 import { cargarEvento } from "../../evento";
@@ -45,6 +49,10 @@ export default async function RubroPage({ params }: PageProps<"/eventos/[eventoI
     listarProveedores(db),
     obtenerTiposCambio(db, eventoId),
   ]);
+  const archivos = await archivosPorCotizacion(
+    db,
+    cotizaciones.map((c) => c.id),
+  );
   const masBarata = idMasBarata(cotizaciones);
   const abierto = !evento.cerrado;
   const permisos = {
@@ -82,6 +90,7 @@ export default async function RubroPage({ params }: PageProps<"/eventos/[eventoI
                 className="space-y-5"
               >
                 <input type="hidden" name="eventoRubroId" value={eventoRubroId} />
+                <AdjuntoCotizacion eventoRubroId={eventoRubroId} conLectura={hayLecturaPdf()} />
                 <CotizacionCampos proveedores={proveedores} dias={rubro.dias} />
               </FormAccion>
             </Hoja>
@@ -135,6 +144,7 @@ export default async function RubroPage({ params }: PageProps<"/eventos/[eventoI
               <TarjetaCotizacion
                 key={c.id}
                 c={c}
+                archivos={archivos.get(c.id) ?? []}
                 base={base}
                 dosDias={rubro.dias === 2}
                 masBarata={c.id === masBarata}
@@ -168,18 +178,28 @@ export default async function RubroPage({ params }: PageProps<"/eventos/[eventoI
           )}
         </div>
       )}
+
+      <SeccionArchivos
+        duenio={{ tipo: "rubro", id: eventoRubroId }}
+        actor={usuario}
+        abierto={abierto}
+        titulo="Archivos del rubro"
+        className="mt-8"
+      />
     </div>
   );
 }
 
 function TarjetaCotizacion({
   c,
+  archivos,
   base,
   dosDias,
   masBarata,
   permisos,
 }: {
   c: CotizacionListada;
+  archivos: ArchivoListado[];
   base: string;
   dosDias: boolean;
   masBarata: boolean;
@@ -237,16 +257,25 @@ function TarjetaCotizacion({
         ))}
       </dl>
 
-      {c.adjunto && (
-        <a
-          href={`/api/adjuntos/${c.adjunto}`}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-flex items-center gap-2 self-start py-1 text-sm hover:underline"
-        >
-          <FileText className="size-4 text-muted-foreground" />
-          Cotización.pdf
-        </a>
+      {archivos.length > 0 && (
+        <ul className="mt-3 space-y-0.5">
+          {archivos.map((a) => {
+            const Icono = a.tipo === "pdf" ? FileText : ImageIcon;
+            return (
+              <li key={a.id}>
+                <a
+                  href={`/api/archivos/${a.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex max-w-full items-center gap-2 py-1 text-sm hover:underline"
+                >
+                  <Icono className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{a.nombre}</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       {aprobada && c.aprobadaAt && (

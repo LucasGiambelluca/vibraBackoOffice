@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/db/client";
 import { esViolacionUnica } from "@/db/errores";
 import { cotizacion } from "@/db/schema";
-import { guardarPdf } from "@/lib/adjuntos";
+import { subirArchivo } from "@/lib/archivos";
+import { guardarArchivo } from "@/lib/archivos-disco";
 import {
   aprobarCotizacion,
   borrarCotizacion,
@@ -230,32 +231,17 @@ describe("con DB", () => {
   describe("editarCotizacion", () => {
     const cambios = { ...COTIZACION, precioDia: "500", descuento2Dias: "0", moneda: "BOB" as const };
 
-    it("cambia los datos y conserva el adjunto si no se indica otro", async () => {
-      const nombre = await guardarPdf(pdf());
+    it("cambia los datos", async () => {
       const a = await nuevaCotizacion(db, sonido, proveedor);
-      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, nombre);
       await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor });
-      expect(await obtenerCotizacion(db, a)).toMatchObject({ precioDia: "500.00", adjunto: nombre });
-    });
-
-    it("al reemplazar o quitar el adjunto borra el archivo anterior", async () => {
-      const viejo = await guardarPdf(pdf());
-      const nuevo = await guardarPdf(pdf());
-      const a = await nuevaCotizacion(db, sonido, proveedor);
-      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, viejo);
-      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, nuevo);
-      expect(existsSync(path.join(process.env.UPLOADS_DIR!, viejo))).toBe(false);
-
-      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, null);
-      expect((await obtenerCotizacion(db, a))?.adjunto).toBeNull();
-      expect(existsSync(path.join(process.env.UPLOADS_DIR!, nuevo))).toBe(false);
+      expect(await obtenerCotizacion(db, a)).toMatchObject({ precioDia: "500.00", moneda: "BOB" });
     });
 
 
     it("una aprobada vuelve a pendiente, salvo que se pida conservar la aprobación", async () => {
       const a = await nuevaCotizacion(db, sonido, proveedor);
       await aprobarCotizacion(db, a);
-      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, undefined, true);
+      await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor }, true);
       expect(await estado(db, a)).toBe("aprobada");
       await editarCotizacion(db, a, { ...cambios, proveedorId: proveedor });
       expect(await estado(db, a)).toBe("pendiente");
@@ -269,10 +255,16 @@ describe("con DB", () => {
   });
 
   describe("borrarCotizacion", () => {
-    it("borra la fila y su PDF", async () => {
-      const nombre = await guardarPdf(pdf());
+    /** Una cotización con un PDF adjunto; devuelve su id y el nombre del PDF en disco. */
+    async function conPdf() {
       const a = await nuevaCotizacion(db, sonido, proveedor);
-      await editarCotizacion(db, a, { ...COTIZACION, moneda: "BOB", proveedorId: proveedor }, nombre);
+      const guardado = await guardarArchivo(pdf());
+      await subirArchivo(db, { tipo: "cotizacion", id: a }, guardado, "cotizacion.pdf", null);
+      return { a, nombre: guardado.guardado };
+    }
+
+    it("borra la fila y sus archivos", async () => {
+      const { a, nombre } = await conPdf();
       await borrarCotizacion(db, a);
       expect(await obtenerCotizacion(db, a)).toBeUndefined();
       expect(existsSync(path.join(process.env.UPLOADS_DIR!, nombre))).toBe(false);
@@ -280,9 +272,7 @@ describe("con DB", () => {
     });
 
     it("borra la fila aunque el PDF no se pueda borrar", async () => {
-      const nombre = await guardarPdf(pdf());
-      const a = await nuevaCotizacion(db, sonido, proveedor);
-      await editarCotizacion(db, a, { ...COTIZACION, moneda: "BOB", proveedorId: proveedor }, nombre);
+      const { a, nombre } = await conPdf();
       rmSync(path.join(process.env.UPLOADS_DIR!, nombre));
       mkdirSync(path.join(process.env.UPLOADS_DIR!, nombre));
       vi.spyOn(console, "error").mockImplementation(() => {});

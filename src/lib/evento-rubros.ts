@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { Db } from "@/db/client";
 import { evento, eventoRubro, grupo, rubro } from "@/db/schema";
 import { conRestricciones, ErrorNegocio } from "@/lib/acciones";
+import { archivosEnCascada } from "@/lib/archivos";
+import { borrarDelDisco } from "@/lib/archivos-disco";
 import { asegurarEventoAbierto } from "@/lib/eventos";
 import { MONEDAS } from "@/lib/money";
 import type { Tx } from "@/lib/recordatorios";
@@ -67,14 +69,17 @@ export async function agregarRubros(db: Db, eventoId: string, rubros: { rubroId:
 
 /** Solo si todavía no tiene cotizaciones. */
 export async function quitarRubro(db: Db, id: string): Promise<void> {
-  await conRestricciones(
+  const enDisco = await conRestricciones(
     () =>
       db.transaction(async (tx) => {
         await eventoAbierto(tx, id);
+        const nombres = await archivosEnCascada(tx, "eventoRubroId", id);
         await tx.delete(eventoRubro).where(eq(eventoRubro.id, id));
+        return nombres;
       }),
     { fk: "El rubro tiene cotizaciones: borralas primero" },
   );
+  await borrarDelDisco(enDisco);
 }
 
 export async function editarRubroEvento(db: Db, id: string, datos: DatosPresupuesto): Promise<void> {

@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { Db } from "@/db/client";
 import { evento, grupo, tarea, user } from "@/db/schema";
 import { conRestricciones, ErrorNegocio } from "@/lib/acciones";
+import { archivosEnCascada } from "@/lib/archivos";
+import { borrarDelDisco } from "@/lib/archivos-disco";
 import { asegurarEventoAbierto } from "@/lib/eventos";
 import { cancelarPendientes, regenerarAutomaticos, type Tx } from "@/lib/recordatorios";
 import { hoyEnLaPaz, sumarDias } from "@/lib/reminders";
@@ -90,10 +92,13 @@ export async function cambiarEstadoTarea(db: Db, id: string, estado: EstadoTarea
 
 /** Sus recordatorios y notificaciones se borran en cascada. */
 export async function borrarTarea(db: Db, id: string): Promise<void> {
-  await db.transaction(async (tx) => {
+  const enDisco = await db.transaction(async (tx) => {
     await tareaAbierta(tx, id);
+    const nombres = await archivosEnCascada(tx, "tareaId", id);
     await tx.delete(tarea).where(eq(tarea.id, id));
+    return nombres;
   });
+  await borrarDelDisco(enDisco);
 }
 
 function consultaTareas(db: Db) {

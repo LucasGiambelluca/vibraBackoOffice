@@ -3,7 +3,8 @@ import { z } from "zod";
 import type { Db } from "@/db/client";
 import { cotizacion, evento, eventoRubro, eventoTipoCambio, proveedor, rubro, user } from "@/db/schema";
 import { conRestricciones, ErrorNegocio } from "@/lib/acciones";
-import { borrarPdf } from "@/lib/adjuntos";
+import { archivosEnCascada, insertarArchivo } from "@/lib/archivos";
+import { borrarDelDisco, type ArchivoGuardado } from "@/lib/archivos-disco";
 import { asegurarEventoAbierto } from "@/lib/eventos";
 import { aArs, ahorroCotizacion, MONEDAS, totalCotizacion, type Moneda, type TiposCambio } from "@/lib/money";
 import type { Tx } from "@/lib/recordatorios";
@@ -46,20 +47,21 @@ export const nuevaCotizacionSchema = cotizacionSchema.extend({
 export type DatosCotizacion = z.infer<typeof cotizacionSchema>;
 export type NuevaCotizacion = z.infer<typeof nuevaCotizacionSchema>;
 
-/** Falla si el rubro del evento no existe o su evento está cerrado. */
-async function asegurarRubroAbierto(tx: Tx, eventoRubroId: string): Promise<void> {
+/** Falla si el rubro del evento no existe o su evento está cerrado; devuelve el evento. */
+async function asegurarRubroAbierto(tx: Tx, eventoRubroId: string): Promise<string> {
   const [fila] = await tx
     .select({ eventoId: eventoRubro.eventoId })
     .from(eventoRubro)
     .where(eq(eventoRubro.id, eventoRubroId));
   if (!fila) throw new ErrorNegocio("Rubro inválido");
   await asegurarEventoAbierto(tx, fila.eventoId);
+  return fila.eventoId;
 }
 
 /** La cotización con su rubro del evento; falla si no existe o el evento está cerrado. */
 async function cotizacionAbierta(tx: Tx, id: string) {
   const [fila] = await tx
-    .select({ eventoRubroId: cotizacion.eventoRubroId, adjunto: cotizacion.adjunto })
+    .select({ eventoRubroId: cotizacion.eventoRubroId })
     .from(cotizacion)
     .where(eq(cotizacion.id, id));
   if (!fila) throw new ErrorNegocio("La cotización no existe");
@@ -67,20 +69,22 @@ async function cotizacionAbierta(tx: Tx, id: string) {
   return fila;
 }
 
+/** `adjunto`: un archivo ya guardado en disco (el PDF del proveedor) que queda en la cotización. */
 export async function crearCotizacion(
   db: Db,
   datos: NuevaCotizacion,
   creadoPor: string | null,
-  adjunto: string | null = null,
+  adjunto: { guardado: ArchivoGuardado; nombre: string } | null = null,
 ): Promise<string> {
   return conRestricciones(
     () =>
       db.transaction(async (tx) => {
-        await asegurarRubroAbierto(tx, datos.eventoRubroId);
-        const [fila] = await tx
-          .insert(cotizacion)
-          .values({ ...datos, creadoPor, adjunto })
-          .returning({ id: cotizacion.id });
+        const eventoId = await asegurarRubroAbierto(tx, datos.eventoRubroId);
+        const [fila] = await tx.insert(cotizacion).values({ ...datos, creadoPor }).returning({ id: cotizacion.id });
+        if (adjunto) {
+          const duenio = { tipo: "cotizacion" as const, id: fila.id };
+          await insertarArchivo(tx, eventoId, duenio, adjunto.guardado, adjunto.nombre, creadoPor);
+        }
         return fila.id;
       }),
     { fk: "Rubro o proveedor inválido" },
@@ -90,8 +94,6 @@ export async function crearCotizacion(
 const SIN_APROBACION = { aprobadaPor: null, aprobadaAt: null };
 
 /**
- * `adjunto`: undefined = se conserva el actual; null = se quita; string = se reemplaza.
- * El archivo anterior se borra del disco después de actualizar la fila.
  * Si estaba aprobada vuelve a pendiente (el admin la tiene que aprobar de nuevo),
  * salvo con `conservarAprobacion`, que es cuando la edita el propio admin.
  */
@@ -99,12 +101,10 @@ export async function editarCotizacion(
   db: Db,
   id: string,
   datos: DatosCotizacion,
-  adjunto?: string | null,
   conservarAprobacion = false,
 ): Promise<void> {
   const cambios = {
     ...datos,
-    ...(adjunto === undefined ? {} : { adjunto }),
     // En el mismo UPDATE, para no pisar una aprobación o reversión simultánea.
     ...(conservarAprobacion
       ? {}
@@ -114,10 +114,10 @@ export async function editarCotizacion(
           aprobadaAt: sql`case when ${cotizacion.estado} = 'aprobada' then null else ${cotizacion.aprobadaAt} end`,
         }),
   };
-  const anterior = await conRestricciones(
+  await conRestricciones(
     () =>
       db.transaction(async (tx) => {
-        const actual = await cotizacionAbierta(tx, id);
+        await cotizacionAbierta(tx, id);
         const filas = await tx
           .update(cotizacion)
           .set(cambios)
@@ -125,11 +125,9 @@ export async function editarCotizacion(
           .returning({ id: cotizacion.id });
         // Se pudo borrar entre la lectura y la actualización.
         if (filas.length === 0) throw new ErrorNegocio("La cotización no existe");
-        return actual.adjunto;
       }),
     { fk: "Proveedor inválido" },
   );
-  if (adjunto !== undefined && anterior !== adjunto) await borrarPdf(anterior);
 }
 
 /**
@@ -178,13 +176,14 @@ export async function revertirAprobacion(db: Db, id: string): Promise<void> {
 }
 
 export async function borrarCotizacion(db: Db, id: string): Promise<void> {
-  const adjunto = await db.transaction(async (tx) => {
+  const enDisco = await db.transaction(async (tx) => {
     await cotizacionAbierta(tx, id);
-    const [fila] = await tx.delete(cotizacion).where(eq(cotizacion.id, id)).returning({ adjunto: cotizacion.adjunto });
-    if (!fila) throw new ErrorNegocio("La cotización no existe");
-    return fila.adjunto;
+    const nombres = await archivosEnCascada(tx, "cotizacionId", id);
+    const filas = await tx.delete(cotizacion).where(eq(cotizacion.id, id)).returning({ id: cotizacion.id });
+    if (filas.length === 0) throw new ErrorNegocio("La cotización no existe");
+    return nombres;
   });
-  await borrarPdf(adjunto);
+  await borrarDelDisco(enDisco);
 }
 
 /** Fila cruda, para precargar el formulario de edición. */
@@ -225,7 +224,6 @@ export async function listarCotizaciones(db: Db, filtro: FiltroCotizaciones = {}
         moneda: cotizacion.moneda,
         precioDia: cotizacion.precioDia,
         descuento2Dias: cotizacion.descuento2Dias,
-        adjunto: cotizacion.adjunto,
         estado: cotizacion.estado,
         aprobador: user.name,
         aprobadaAt: cotizacion.aprobadaAt,

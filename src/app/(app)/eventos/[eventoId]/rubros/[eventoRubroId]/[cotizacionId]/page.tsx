@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { SeccionArchivos } from "@/components/archivos/seccion-archivos";
 import { Encabezado } from "@/components/encabezado";
 import { FormAccion } from "@/components/form-accion";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,19 +57,17 @@ export default async function EditarCotizacionPage({
           >
             <input type="hidden" name="cotizacionId" value={cotizacion.id} />
             <CotizacionCampos proveedores={proveedores} dias={rubro.dias} valores={cotizacion} />
-            {cotizacion.adjunto && (
-              <label className="flex items-center gap-2.5 text-sm">
-                <input type="checkbox" name="quitarAdjunto" className="size-4 accent-black" />
-                Quitar el PDF actual (
-                <a href={`/api/adjuntos/${cotizacion.adjunto}`} target="_blank" rel="noreferrer" className="underline">
-                  ver
-                </a>
-                ). Si subís uno nuevo, reemplaza al actual.
-              </label>
-            )}
           </FormAccion>
         </CardContent>
       </Card>
+
+      <SeccionArchivos
+        duenio={{ tipo: "cotizacion", id: cotizacion.id }}
+        actor={usuario}
+        abierto
+        titulo="Archivos de la cotización"
+        className="mt-6"
+      />
     </div>
   );
 }
