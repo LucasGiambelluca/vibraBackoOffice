@@ -30,16 +30,20 @@ export function TotalEventoCard({
   const aprobado = totales.aprobado;
 
   return (
-    <Link
-      href={`/eventos/${id}`}
+    <section
       className={cn(
-        "group flex flex-col justify-between gap-6 rounded-3xl p-6 transition-shadow md:p-8",
+        "group relative flex flex-col justify-between gap-6 rounded-3xl p-6 transition-shadow md:p-8",
         destacado ? "bg-[#0a0a0a] text-white" : "bg-card ring-1 ring-border hover:shadow-[0_8px_24px_rgb(0_0_0/0.08)]",
       )}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="truncate font-display text-xl font-bold tracking-tight group-hover:underline">{nombre}</h2>
+          {/* Toda la tarjeta lleva al evento, pero el nombre accesible es solo el del evento. */}
+          <h2 className="truncate font-display text-xl font-bold tracking-tight group-hover:underline">
+            <Link href={`/eventos/${id}`} className="after:absolute after:inset-0">
+              {nombre}
+            </Link>
+          </h2>
           {datos && <p className={cn("mt-0.5 text-sm", destacado ? "text-white/55" : "text-tinta-3")}>{datos}</p>}
         </div>
         <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-marca-suave px-3 text-xs font-semibold text-marca-tinta max-sm:hidden">
@@ -110,6 +114,6 @@ export function TotalEventoCard({
           {Math.round(avance * 100)}% de los rubros con cotización aprobada
         </p>
       </div>
-    </Link>
+    </section>
   );
 }

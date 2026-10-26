@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { ingresar } from "./ayudas";
 
-test("cargar y aprobar una cotización suma al total del evento", async ({ page }) => {
+test("cargar y aprobar una cotización suma al total del evento en ARS", async ({ page }) => {
   await ingresar(page);
 
   await page.getByRole("link", { name: "Proveedores" }).click();
@@ -25,5 +25,5 @@ test("cargar y aprobar una cotización suma al total del evento", async ({ page 
   await expect(page.getByText("Aprobada", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Tablero" }).click();
-  await expect(page.getByText("BOB 1.800,00").first()).toBeVisible();
+  await expect(page.getByText("ARS 1.800,00").first()).toBeVisible();
 });

@@ -29,7 +29,7 @@ export function CotizacionCampos({
         </Select>
       </Campo>
       <Campo id="moneda" label="Moneda">
-        <Select id="moneda" name="moneda" defaultValue={valores?.moneda ?? "BOB"}>
+        <Select id="moneda" name="moneda" defaultValue={valores?.moneda ?? "ARS"}>
           {MONEDAS.map((m) => (
             <option key={m} value={m}>
               {m}

@@ -7,8 +7,8 @@ test("un recordatorio manual llega a la campanita", async ({ page }) => {
   await page.getByRole("link", { name: "Tareas" }).click();
   await page.getByRole("button", { name: "Nueva tarea" }).click();
   await page.getByLabel("Tarea", { exact: true }).fill("Pedir permisos E2E");
-  // Hay selects de Área y Responsable también en los filtros: se usan los ids del alta.
-  await page.locator("#areaId").selectOption({ label: "Seguridad y Prevención" });
+  // Hay selects de Grupo y Responsable también en los filtros: se usan los ids del alta.
+  await page.locator("#grupoId").selectOption({ label: "Seguridad y Prevención" });
   await page.locator("#responsableId").selectOption({ label: ADMIN.nombre });
   await page.getByRole("button", { name: "Crear tarea" }).click();
 
