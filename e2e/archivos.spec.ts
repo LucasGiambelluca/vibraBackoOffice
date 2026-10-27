@@ -58,7 +58,7 @@ test("el PDF de una cotización nueva queda adjunto a la cotización", async ({ 
   await page.getByRole("button", { name: "Nueva cotización" }).click();
   await page.getByLabel("PDF o foto de la cotización").setInputFiles({ ...PDF, name: "cotizacion-pantallas.pdf" });
   // Sin MINIMAX_API_KEY el PDF no se lee con IA.
-  await expect(page.getByText("Leyendo el PDF")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Leer con IA" })).toHaveCount(0);
   await page.getByLabel("Proveedor").selectOption({ label: "Pantallas E2E" });
   await page.getByLabel("Qué incluye").fill("Pantalla 6x4");
   await page.getByLabel("Precio por día").fill("1000");

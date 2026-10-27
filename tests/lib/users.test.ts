@@ -2,9 +2,10 @@ import { verifyPassword } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "@/db/client";
-import { account, user } from "@/db/schema";
+import { account, session, user } from "@/db/schema";
 import {
   borrarUsuario,
+  cambiarContraseniaDeUsuario,
   cambiarRol,
   crearUsuario,
   ErrorUsuario,
@@ -136,6 +137,35 @@ describe("con DB", () => {
     it("falla con ErrorUsuario si el usuario no existe", async () => {
       const admin = await crearUsuario(db, datos({ rol: "admin" }));
       await expect(borrarUsuario(db, admin, "no-existe")).rejects.toThrow("El usuario no existe");
+    });
+  });
+
+  describe("cambiarContraseniaDeUsuario", () => {
+    it("el admin le pone otra contraseña y se cierran sus sesiones", async () => {
+      const admin = await crearUsuario(db, datos({ email: "admin@vibra.bo", rol: "admin" }));
+      const editor = await crearUsuario(db, datos());
+      await db.insert(session).values({
+        id: "s1",
+        token: "t1",
+        userId: editor,
+        expiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await cambiarContraseniaDeUsuario(db, admin, editor, "nueva-clave-123");
+      const [cuenta] = await db.select().from(account).where(eq(account.userId, editor));
+      expect(await verifyPassword({ hash: cuenta.password!, password: "nueva-clave-123" })).toBe(true);
+      expect(await db.select().from(session).where(eq(session.userId, editor))).toEqual([]);
+    });
+
+    it("no sirve para la propia, ni a un editor, ni con un usuario que no existe", async () => {
+      const admin = await crearUsuario(db, datos({ email: "admin@vibra.bo", rol: "admin" }));
+      const editor = await crearUsuario(db, datos());
+      await expect(cambiarContraseniaDeUsuario(db, admin, admin, "nueva-clave-123")).rejects.toThrow("Mi cuenta");
+      await expect(cambiarContraseniaDeUsuario(db, editor, admin, "nueva-clave-123")).rejects.toThrow("Ya no sos admin");
+      await expect(cambiarContraseniaDeUsuario(db, admin, "no-existe", "nueva-clave-123")).rejects.toThrow(
+        "El usuario no existe",
+      );
     });
   });
 });

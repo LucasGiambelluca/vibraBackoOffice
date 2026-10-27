@@ -13,7 +13,11 @@ if (esProduccion() && !process.env.BETTER_AUTH_SECRET) {
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL,
+  // BETTER_AUTH_URL es la dirección pública de la app (con /backoffice si lo tiene, la usan los
+  // links de los emails). Better Auth toma cualquier ruta en baseURL como la de su API, así que
+  // se le pasa solo el origen. Su basePath queda en /api/auth: Next le saca el /backoffice a la
+  // URL antes de llegar al route handler. El cliente sí lo lleva (src/lib/auth-client.ts).
+  baseURL: process.env.BETTER_AUTH_URL ? new URL(process.env.BETTER_AUTH_URL).origin : undefined,
   database: drizzleAdapter(db, { provider: "pg", schema }),
   emailAndPassword: {
     enabled: true,

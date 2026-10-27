@@ -1,21 +1,23 @@
 import { hashPassword } from "better-auth/crypto";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
 import { esViolacionUnica } from "@/db/errores";
-import { account, user } from "@/db/schema";
+import { account, session, user } from "@/db/schema";
 import { ErrorNegocio } from "@/lib/acciones";
 import { ROLES, type Rol } from "@/lib/permissions";
 
 export { esViolacionUnica };
 
+const passwordSchema = z
+  .string("Falta la contraseña")
+  .min(8, "La contraseña debe tener al menos 8 caracteres")
+  .max(128, "La contraseña no puede tener más de 128 caracteres");
+
 export const nuevoUsuarioSchema = z.object({
   nombre: z.string("Falta el nombre").trim().min(2, "El nombre es muy corto"),
   email: z.string("Falta el email").trim().toLowerCase().pipe(z.email("Email inválido")),
-  password: z
-    .string("Falta la contraseña")
-    .min(8, "La contraseña debe tener al menos 8 caracteres")
-    .max(128, "La contraseña no puede tener más de 128 caracteres"),
+  password: passwordSchema,
   rol: z.enum(ROLES, "Rol inválido"),
 });
 
@@ -88,6 +90,30 @@ export async function borrarUsuario(db: Db, actorId: string, userId: string): Pr
     // session y account se borran en cascada.
     const filas = await tx.delete(user).where(eq(user.id, userId)).returning({ id: user.id });
     if (filas.length === 0) throw new ErrorUsuario("El usuario no existe");
+  });
+}
+
+export const nuevaContraseniaSchema = z.object({
+  userId: z.string("Usuario inválido").min(1, "Usuario inválido"),
+  password: passwordSchema,
+});
+
+/**
+ * El admin le pone una contraseña nueva a otro usuario (que la olvidó). Se cierran todas sus
+ * sesiones abiertas: si alguien más la usaba, queda afuera. La propia se cambia en Mi cuenta.
+ */
+export async function cambiarContraseniaDeUsuario(db: Db, actorId: string, userId: string, password: string): Promise<void> {
+  if (actorId === userId) throw new ErrorUsuario("Tu contraseña la cambiás en Mi cuenta");
+  const hash = await hashPassword(password);
+  await db.transaction(async (tx) => {
+    await bloquearAdmins(tx, actorId);
+    const filas = await tx
+      .update(account)
+      .set({ password: hash, updatedAt: new Date() })
+      .where(and(eq(account.userId, userId), eq(account.providerId, "credential")))
+      .returning({ id: account.id });
+    if (filas.length === 0) throw new ErrorUsuario("El usuario no existe");
+    await tx.delete(session).where(eq(session.userId, userId));
   });
 }
 

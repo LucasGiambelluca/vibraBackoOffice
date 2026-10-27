@@ -1,27 +1,47 @@
 // Levanta la app para las E2E con su propia base (PGlite en .data/e2e), migrada y con un admin.
+// Con E2E_PRODUCCION=1 compila y sirve como en el VPS: build de producción bajo /backoffice
+// (playwright.produccion.config.ts).
 import { spawn, spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
+
+const produccion = process.env.E2E_PRODUCCION === "1";
+const puerto = produccion ? "3200" : "3100";
+const base = produccion ? "/backoffice" : "";
+const sufijo = produccion ? "-prod" : "";
+
+if (produccion && !process.env.E2E_DATABASE_URL) {
+  console.error("E2E_PRODUCCION necesita E2E_DATABASE_URL: un Postgres descartable (se borra entero).");
+  process.exit(1);
+}
 
 const env = {
   ...process.env,
   // Vacío = PGlite. Las variables del proceso le ganan a .env.local.
-  DATABASE_URL: "",
-  PGLITE_DIR: ".data/e2e",
-  UPLOADS_DIR: ".data/e2e-uploads",
-  NEXT_DIST_DIR: ".next-e2e",
-  BETTER_AUTH_URL: "http://localhost:3100",
+  DATABASE_URL: produccion ? process.env.E2E_DATABASE_URL : "",
+  PGLITE_DIR: `.data/e2e${sufijo}`,
+  UPLOADS_DIR: `.data/e2e${sufijo}-uploads`,
+  NEXT_DIST_DIR: `.next-e2e${sufijo}`,
+  NEXT_PUBLIC_BASE_PATH: base,
+  BETTER_AUTH_URL: `http://localhost:${puerto}${base}`,
   BETTER_AUTH_SECRET: "solo-para-e2e-no-usar-en-produccion",
   WORKER_EN_APP: "true",
   WORKER_INTERVALO_MS: "2000",
   SMTP_HOST: "",
   // Sin IA: "Completar desde el PDF" no aparece y no se llama a la API.
   MINIMAX_API_KEY: "",
-  // Las E2E hacen muchos logins seguidos desde la misma IP.
-  AUTH_SIN_LIMITE: "1",
+  // Las E2E hacen muchos logins seguidos desde la misma IP. En producción queda prendido: se prueba.
+  AUTH_SIN_LIMITE: produccion ? "" : "1",
 };
 
-rmSync(".data/e2e", { recursive: true, force: true });
-rmSync(".data/e2e-uploads", { recursive: true, force: true });
+rmSync(env.PGLITE_DIR, { recursive: true, force: true });
+if (produccion) {
+  // Base limpia: se borran las tablas y el registro de migraciones.
+  const { default: postgres } = await import("postgres");
+  const sql = postgres(env.DATABASE_URL, { onnotice: () => {} });
+  await sql.unsafe("drop schema if exists drizzle cascade; drop schema public cascade; create schema public;");
+  await sql.end();
+}
+rmSync(env.UPLOADS_DIR, { recursive: true, force: true });
 
 function npm(args) {
   const resultado = spawnSync("npm", ["run", ...args], { env, stdio: "inherit", shell: true });
@@ -31,6 +51,14 @@ function npm(args) {
 npm(["db:migrate"]);
 npm(["db:seed", "--", "admin@e2e.test", '"Admin E2E"', "e2e-secreto-123"]);
 
-const servidor = spawn("npx", ["next", "dev", "-p", "3100"], { env, stdio: "inherit", shell: true });
+if (produccion) {
+  const build = spawnSync("npx", ["next", "build"], { env: { ...env, NODE_ENV: "production" }, stdio: "inherit", shell: true });
+  if (build.status !== 0) process.exit(build.status ?? 1);
+}
+const servidor = spawn("npx", ["next", produccion ? "start" : "dev", "-p", puerto], {
+  env: produccion ? { ...env, NODE_ENV: "production" } : env,
+  stdio: "inherit",
+  shell: true,
+});
 for (const senal of ["SIGINT", "SIGTERM"]) process.on(senal, () => servidor.kill(senal));
 servidor.on("exit", (codigo) => process.exit(codigo ?? 0));

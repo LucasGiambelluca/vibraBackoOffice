@@ -1,11 +1,12 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { conBase } from "@/lib/base-path";
 
 /** Logo de RS Group: blanco sobre negro, negro sobre claro. */
 export function LogoRs({ claro = false, className }: { claro?: boolean; className?: string }) {
   return (
     <Image
-      src={claro ? "/marca/rsgroup-blanco.png" : "/marca/rsgroup-negro.png"}
+      src={conBase(claro ? "/marca/rsgroup-blanco.png" : "/marca/rsgroup-negro.png")}
       alt="RS Group"
       width={752}
       height={504}

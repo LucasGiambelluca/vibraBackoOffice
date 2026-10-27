@@ -10,6 +10,7 @@ import { usuarioActual } from "@/lib/session";
 import { listarUsuarios } from "@/lib/users";
 import { BorrarUsuarioButton } from "./borrar-usuario-button";
 import { CambiarRolForm } from "./cambiar-rol-form";
+import { ContraseniaForm } from "./contrasenia-form";
 import { NuevoUsuarioForm } from "./nuevo-usuario-form";
 
 export default async function UsuariosPage() {
@@ -65,7 +66,14 @@ export default async function UsuariosPage() {
                 <TableCell className="max-lg:hidden">
                   {u.recibirEmails ? <Pastilla tono="ok">Activados</Pastilla> : <Pastilla>Apagados</Pastilla>}
                 </TableCell>
-                <TableCell className="text-right">{u.id !== yo.id && <BorrarUsuarioButton userId={u.id} />}</TableCell>
+                <TableCell className="text-right">
+                  {u.id !== yo.id && (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <ContraseniaForm userId={u.id} nombre={u.name} />
+                      <BorrarUsuarioButton userId={u.id} />
+                    </div>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

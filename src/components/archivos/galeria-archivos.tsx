@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { borrarArchivoAction } from "@/app/(app)/archivos/actions";
 import { BotonAccion } from "@/components/form-accion";
 import { cn } from "@/lib/utils";
+import { conBase } from "@/lib/base-path";
 
 export type ArchivoVista = {
   id: string;
@@ -19,7 +20,7 @@ export type ArchivoVista = {
   borrable: boolean;
 };
 
-const url = (id: string, extra = "") => `/api/archivos/${id}${extra}`;
+const url = (id: string, extra = "") => conBase(`/api/archivos/${id}${extra}`);
 
 /** Fotos en grilla (abren el visor) y PDF en lista (abren en otra pestaña). */
 export function GaleriaArchivos({

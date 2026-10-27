@@ -1,8 +1,9 @@
 "use client";
 
-import { LoaderCircle } from "lucide-react";
-import { useState, useTransition } from "react";
+import { LoaderCircle, Sparkles } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
 import { Campo } from "@/components/campos";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MAX_ARCHIVO, TIPOS_ACEPTADOS } from "@/lib/limites";
 import { leerPdfAction } from "./actions";
@@ -25,13 +26,24 @@ function completar(form: HTMLFormElement, nombre: string, valor: string | null) 
 
 /**
  * El archivo del proveedor al cargar una cotización. Si es un PDF y hay IA configurada,
- * se lee apenas se elige y llena el formulario para revisar.
+ * "Leer con IA" lo manda a MiniMax (solo cuando la persona lo pide) y llena el formulario
+ * para revisar.
  */
 export function AdjuntoCotizacion({ eventoRubroId, conLectura }: { eventoRubroId: string; conLectura: boolean }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [esPdf, setEsPdf] = useState(false);
   const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null);
   const [leyendo, startTransition] = useTransition();
 
-  function leer(archivo: File, input: HTMLInputElement, form: HTMLFormElement) {
+  function leer() {
+    const elegido = input.current;
+    const archivo = elegido?.files?.[0];
+    const form = elegido?.form;
+    if (!elegido || !archivo || !form) return;
+    if (archivo.size > MAX_ARCHIVO) {
+      setMensaje({ ok: false, texto: "El archivo supera los 10 MB" });
+      return;
+    }
     const datos = new FormData();
     datos.set("adjunto", archivo);
     datos.set("eventoRubroId", eventoRubroId);
@@ -46,7 +58,7 @@ export function AdjuntoCotizacion({ eventoRubroId, conLectura }: { eventoRubroId
       }
       // Mientras se leía, se guardó la cotización (el formulario se limpió) o se eligió otro
       // archivo: esta respuesta ya no corresponde.
-      if (input.files?.[0] !== archivo) return;
+      if (elegido.files?.[0] !== archivo) return;
       if (!resultado.ok) {
         setMensaje({ ok: false, texto: resultado.error });
         return;
@@ -67,23 +79,26 @@ export function AdjuntoCotizacion({ eventoRubroId, conLectura }: { eventoRubroId
     <div className="space-y-2">
       <Campo id="adjunto" label="PDF o foto de la cotización (opcional, hasta 10 MB)">
         <Input
+          ref={input}
           id="adjunto"
           name="adjunto"
           type="file"
           accept={TIPOS_ACEPTADOS.join(",")}
           onChange={(e) => {
-            const input = e.currentTarget;
-            const archivo = input.files?.[0];
+            setEsPdf(e.currentTarget.files?.[0]?.type === "application/pdf");
             setMensaje(null);
-            if (!conLectura || archivo?.type !== "application/pdf" || !input.form) return;
-            if (archivo.size > MAX_ARCHIVO) {
-              setMensaje({ ok: false, texto: "El archivo supera los 10 MB" });
-              return;
-            }
-            leer(archivo, input, input.form);
           }}
         />
       </Campo>
+      {conLectura && esPdf && !leyendo && (
+        <div className="space-y-1">
+          <Button type="button" variant="outline" onClick={leer}>
+            <Sparkles />
+            Leer con IA
+          </Button>
+          <p className="text-xs text-tinta-3">El PDF se manda a MiniMax para leerlo. Nada se guarda hasta que confirmes.</p>
+        </div>
+      )}
       {leyendo && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
           <LoaderCircle className="size-4 animate-spin" />

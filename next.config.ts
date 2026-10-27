@@ -11,6 +11,8 @@ const HEADERS_SEGURIDAD = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // En producción vive en https://rsgroupenter.com/backoffice (ver src/lib/base-path.ts).
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH || undefined,
   poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: HEADERS_SEGURIDAD }];
@@ -21,7 +23,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["*.ngrok-free.app", "*.ngrok-free.dev", "*.ngrok.app"],
   // El trace del standalone no tiene que arrastrar datos locales, docs ni tests.
   outputFileTracingExcludes: {
-    "*": [".data/**", "docs/**", "tests/**", "e2e/**", "*.pdf", ".next-e2e/**"],
+    "*": [".data/**", "docs/**", "tests/**", "e2e/**", "e2e-produccion/**", "*.pdf", ".next-e2e/**", ".next-e2e-prod/**"],
   },
   // PGlite carga WASM en runtime y nodemailer usa módulos de Node; no pasan por el bundler.
   serverExternalPackages: ["@electric-sql/pglite", "nodemailer"],

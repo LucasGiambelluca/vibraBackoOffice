@@ -1,0 +1,25 @@
+[Unit]
+Description=RS Group back office (Next.js) en /backoffice
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=backoffice
+Group=backoffice
+WorkingDirectory=/opt/backoffice/current/.next/standalone
+EnvironmentFile=/opt/backoffice/.env
+Environment=NODE_ENV=production PORT=3002 HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+# Endurecimiento: solo puede escribir los archivos subidos y la caché de Next (imágenes).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/backoffice/uploads /opt/backoffice/current/.next/standalone/.next/cache
+MemoryMax=1500M
+
+[Install]
+WantedBy=multi-user.target

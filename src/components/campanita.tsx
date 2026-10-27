@@ -7,6 +7,7 @@ import { marcarLeidaAction, marcarTodasLeidasAction } from "@/app/(app)/notifica
 import { Button } from "@/components/ui/button";
 import { formatearFechaHora } from "@/lib/reminders";
 import { cn } from "@/lib/utils";
+import { conBase } from "@/lib/base-path";
 
 type Notificacion = {
   id: string;
@@ -32,7 +33,7 @@ export function Campanita() {
 
   const cargar = useCallback(async () => {
     try {
-      const respuesta = await fetch("/api/notificaciones", { cache: "no-store" });
+      const respuesta = await fetch(conBase("/api/notificaciones"), { cache: "no-store" });
       if (respuesta.ok) setDatos(await respuesta.json());
     } catch {
       // Sin red o respuesta inválida: la próxima consulta reintenta.

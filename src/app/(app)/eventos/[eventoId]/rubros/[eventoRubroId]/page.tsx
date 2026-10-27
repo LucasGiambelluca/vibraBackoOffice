@@ -34,6 +34,7 @@ import { AdjuntoCotizacion } from "../../../../presupuestos/adjunto-cotizacion";
 import { CotizacionCampos } from "../../../../presupuestos/cotizacion-campos";
 import { editarRubroEventoAction, registrarPagoAction } from "../../../actions";
 import { cargarEvento } from "../../evento";
+import { conBase } from "@/lib/base-path";
 
 /** Con el evento cerrado todo queda en falso: no se muestra ningún botón de edición. */
 type Permisos = { editar: boolean; aprobar: boolean; borrar: boolean };
@@ -264,7 +265,7 @@ function TarjetaCotizacion({
             return (
               <li key={a.id}>
                 <a
-                  href={`/api/archivos/${a.id}`}
+                  href={conBase(`/api/archivos/${a.id}`)}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex max-w-full items-center gap-2 py-1 text-sm hover:underline"

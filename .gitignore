@@ -46,5 +46,6 @@ next-env.d.ts
 *.pdf
 # E2E
 .next-e2e/
+.next-e2e-prod/
 playwright-report/
 test-results/
