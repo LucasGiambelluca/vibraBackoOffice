@@ -4,10 +4,11 @@ import { intentar, validar, type Resultado } from "@/lib/acciones";
 import { borrarGrupo, crearGrupo, grupoSchema, moverGrupo, renombrarGrupo } from "@/lib/grupos";
 import { exigir, type Actor } from "@/lib/permissions";
 import { borrarRubro, crearRubro, editarRubro, rubroSchema } from "@/lib/rubros";
+import { idEntero } from "@/lib/validacion";
 
 // Grupos y catálogo de rubros de la productora: solo el admin.
 
-const grupoId = z.coerce.number("Grupo inválido").int("Grupo inválido").positive("Grupo inválido");
+const grupoId = idEntero("Grupo inválido");
 const rubroId = z.string("Rubro inválido").min(1, "Rubro inválido");
 
 export function altaGrupo(db: Db, actor: Actor, datos: unknown): Promise<Resultado> {

@@ -39,15 +39,25 @@ async function escribir(nombre: string, bytes: Buffer): Promise<void> {
   await writeFile(path.join(directorio(), nombre), bytes);
 }
 
+/**
+ * Tope de píxeles al decodificar: una foto de 50 MP entra; un PNG chico de 20.000 × 20.000
+ * (pesa poco y ocupa GB en memoria al abrirlo) no.
+ */
+const MAX_PIXELES = 100_000_000;
+
 /** El formato real de una imagen (por su contenido), o null si no es JPG, PNG ni WebP. */
 async function formatoImagen(bytes: Buffer): Promise<"jpg" | "png" | "webp" | null> {
+  let metadatos;
   try {
-    const { format } = await sharp(bytes).metadata();
-    if (format === "jpeg") return "jpg";
-    return format === "png" || format === "webp" ? format : null;
+    // Solo lee el encabezado: el tamaño declarado se controla abajo, antes de decodificar.
+    metadatos = await sharp(bytes, { limitInputPixels: false }).metadata();
   } catch {
     return null;
   }
+  const { format, width = 0, height = 0 } = metadatos;
+  if (width * height > MAX_PIXELES) throw new ErrorNegocio("La foto tiene demasiados píxeles (máximo 100 megapíxeles)");
+  if (format === "jpeg") return "jpg";
+  return format === "png" || format === "webp" ? format : null;
 }
 
 /**
@@ -69,7 +79,7 @@ export async function guardarArchivo(archivo: File): Promise<ArchivoGuardado> {
   const formato = await formatoImagen(bytes);
   if (!formato) throw new ErrorNegocio("Solo se aceptan PDF o fotos (JPG, PNG o WebP)");
 
-  const base = sharp(bytes).rotate();
+  const base = sharp(bytes, { limitInputPixels: MAX_PIXELES }).rotate();
   const achicada = base
     .clone()
     .resize({ width: LADO_FOTO, height: LADO_FOTO, fit: "inside", withoutEnlargement: true });

@@ -33,9 +33,11 @@ export async function procesarRecordatorios(db: Db, ahora = new Date()): Promise
         fechaLimite: tarea.fechaLimite,
         estado: tarea.estado,
         responsableId: tarea.responsableId,
+        eventoEstado: evento.estado,
       })
       .from(recordatorio)
       .innerJoin(tarea, eq(recordatorio.tareaId, tarea.id))
+      .innerJoin(evento, eq(tarea.eventoId, evento.id))
       .where(and(lte(recordatorio.fechaHora, ahora), pendiente))
       .orderBy(asc(recordatorio.fechaHora))
       .limit(LOTE)
@@ -50,7 +52,8 @@ export async function procesarRecordatorios(db: Db, ahora = new Date()): Promise
 
     for (const r of vencidos) {
       const cancelar = () => tx.update(recordatorio).set({ canceladoAt: ahora }).where(eq(recordatorio.id, r.id));
-      if (r.estado === "hecha") {
+      // Cerrar el evento ya cancela sus recordatorios; esto cubre cualquiera que haya quedado.
+      if (r.estado === "hecha" || r.eventoEstado === "cerrado") {
         await cancelar();
         continue;
       }

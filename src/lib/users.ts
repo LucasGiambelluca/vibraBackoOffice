@@ -59,17 +59,36 @@ export async function listarUsuarios(db: Db) {
     .orderBy(asc(user.name));
 }
 
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/**
+ * Bloquea las filas de los admins hasta el fin de la transacción. Dos admins que se
+ * degradan o se borran entre sí al mismo tiempo se ordenan acá: el segundo ve que el
+ * primero ya no es admin y no puede dejar el sistema sin ninguno.
+ */
+async function bloquearAdmins(tx: Tx, actorId: string): Promise<string[]> {
+  const admins = (await tx.select({ id: user.id }).from(user).where(eq(user.role, "admin")).for("update")).map((a) => a.id);
+  if (!admins.includes(actorId)) throw new ErrorUsuario("Ya no sos admin");
+  return admins;
+}
+
 export async function cambiarRol(db: Db, actorId: string, userId: string, rol: Rol): Promise<void> {
   if (actorId === userId) throw new ErrorUsuario("No podés cambiar tu propio rol");
-  const filas = await db.update(user).set({ role: rol }).where(eq(user.id, userId)).returning({ id: user.id });
-  if (filas.length === 0) throw new ErrorUsuario("El usuario no existe");
+  await db.transaction(async (tx) => {
+    await bloquearAdmins(tx, actorId);
+    const filas = await tx.update(user).set({ role: rol }).where(eq(user.id, userId)).returning({ id: user.id });
+    if (filas.length === 0) throw new ErrorUsuario("El usuario no existe");
+  });
 }
 
 export async function borrarUsuario(db: Db, actorId: string, userId: string): Promise<void> {
   if (actorId === userId) throw new ErrorUsuario("No podés borrar tu propio usuario");
-  // session y account se borran en cascada.
-  const filas = await db.delete(user).where(eq(user.id, userId)).returning({ id: user.id });
-  if (filas.length === 0) throw new ErrorUsuario("El usuario no existe");
+  await db.transaction(async (tx) => {
+    await bloquearAdmins(tx, actorId);
+    // session y account se borran en cascada.
+    const filas = await tx.delete(user).where(eq(user.id, userId)).returning({ id: user.id });
+    if (filas.length === 0) throw new ErrorUsuario("El usuario no existe");
+  });
 }
 
 export async function cambiarRecibirEmails(db: Db, userId: string, recibir: boolean): Promise<void> {

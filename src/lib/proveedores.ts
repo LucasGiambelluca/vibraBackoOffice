@@ -19,7 +19,8 @@ const MENSAJES = { unico: "Ya existe un proveedor con ese nombre" };
 
 /** Proveedores ordenados por nombre; `busqueda` filtra por nombre o contacto. */
 export function listarProveedores(db: Db, busqueda = "") {
-  const patron = `%${busqueda}%`;
+  // % y _ son comodines de LIKE: se buscan como texto.
+  const patron = `%${busqueda.replace(/[\\%_]/g, "\\$&")}%`;
   return db
     .select()
     .from(proveedor)

@@ -1,7 +1,20 @@
 import type { NextConfig } from "next";
 
+// También van en Caddy (deploy/Caddyfile); acá cubren cualquier otra forma de servir la app.
+const HEADERS_SEGURIDAD = [
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
+];
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: HEADERS_SEGURIDAD }];
+  },
   // Las E2E usan otra carpeta para poder correr con `npm run dev` abierto.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   // Para mostrar el dev server por un túnel de ngrok.

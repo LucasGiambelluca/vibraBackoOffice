@@ -53,6 +53,13 @@ describe("con DB", () => {
     expect((await listarProveedores(db, "vallas")).map((p) => p.nombre)).toEqual(["Vallas Sur"]);
   });
 
+  it("% y _ se buscan como texto, no como comodines", async () => {
+    await crearProveedor(db, datos());
+    await crearProveedor(db, datos({ nombre: "Descuento 10% SRL" }));
+    expect((await listarProveedores(db, "%")).map((p) => p.nombre)).toEqual(["Descuento 10% SRL"]);
+    expect(await listarProveedores(db, "_")).toEqual([]);
+  });
+
   it("nombre repetido vuelve como ErrorNegocio", async () => {
     await crearProveedor(db, datos());
     await expect(crearProveedor(db, datos())).rejects.toThrow("Ya existe un proveedor con ese nombre");

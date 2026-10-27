@@ -8,7 +8,7 @@ import { borrarDelDisco } from "@/lib/archivos-disco";
 import { asegurarEventoAbierto } from "@/lib/eventos";
 import { cancelarPendientes, regenerarAutomaticos, type Tx } from "@/lib/recordatorios";
 import { hoyEnLaPaz, sumarDias } from "@/lib/reminders";
-import { fechaOpcional, textoOpcional } from "@/lib/validacion";
+import { fechaOpcional, idEntero, textoOpcional } from "@/lib/validacion";
 
 export const ESTADOS_TAREA = ["pendiente", "en_curso", "hecha"] as const;
 export type EstadoTarea = (typeof ESTADOS_TAREA)[number];
@@ -16,7 +16,7 @@ export type EstadoTarea = (typeof ESTADOS_TAREA)[number];
 /** Campos editables. El evento se elige al crear y no cambia. */
 export const tareaSchema = z.object({
   titulo: z.string("Falta el título").trim().min(2, "El título es muy corto").max(200, "El título es muy largo"),
-  grupoId: z.coerce.number("Grupo inválido").int("Grupo inválido").positive("Grupo inválido"),
+  grupoId: idEntero("Grupo inválido"),
   responsableId: z
     .string()
     .optional()

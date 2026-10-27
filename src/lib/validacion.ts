@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+/** Id `integer` de Postgres escrito en un formulario o una URL (fuera de rango la base tira un error). */
+export const MAX_ENTERO = 2_147_483_647;
+export function idEntero(mensaje: string) {
+  return z.coerce.number(mensaje).int(mensaje).positive(mensaje).max(MAX_ENTERO, mensaje);
+}
+
 /** Texto opcional de formulario: vacío o ausente se guarda como null. */
 export function textoOpcional(max: number) {
   return z

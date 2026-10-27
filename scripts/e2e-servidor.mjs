@@ -16,6 +16,8 @@ const env = {
   SMTP_HOST: "",
   // Sin IA: "Completar desde el PDF" no aparece y no se llama a la API.
   MINIMAX_API_KEY: "",
+  // Las E2E hacen muchos logins seguidos desde la misma IP.
+  AUTH_SIN_LIMITE: "1",
 };
 
 rmSync(".data/e2e", { recursive: true, force: true });

@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import { cotizacion, evento, eventoRubro, eventoTipoCambio, user } from "@/db/schema";
+import { cotizacion, evento, eventoRubro, eventoTipoCambio, recordatorio, tarea, user } from "@/db/schema";
 import { conRestricciones, ErrorNegocio } from "@/lib/acciones";
 import { MONEDAS_CAMBIO, type Moneda, type TiposCambio } from "@/lib/money";
 import type { Tx } from "@/lib/recordatorios";
+import { recordatoriosAutomaticos } from "@/lib/reminders";
 import { decimal, fechaOpcional, textoOpcional } from "@/lib/validacion";
 
 export const ESTADOS_EVENTO = ["activo", "cerrado"] as const;
@@ -43,7 +44,14 @@ export async function asegurarEventoAbierto(db: Db | Tx, eventoId: string): Prom
   if (fila.estado === "cerrado") throw new ErrorNegocio("El evento está cerrado: solo lectura");
 }
 
-export async function crearEvento(db: Db, datos: DatosEvento, origen: OrigenRubros): Promise<string> {
+/** Crea el evento con sus rubros y sus tipos de cambio, todo o nada. */
+export async function crearEvento(
+  db: Db,
+  datos: DatosEvento,
+  origen: OrigenRubros,
+  tipos: DatosTipoCambio[] = [],
+  actorId: string | null = null,
+): Promise<string> {
   return conRestricciones(
     () =>
       db.transaction(async (tx) => {
@@ -63,6 +71,8 @@ export async function crearEvento(db: Db, datos: DatosEvento, origen: OrigenRubr
           rubros = origen.rubros.map((r) => ({ eventoId: fila.id, rubroId: r.rubroId, dias: r.dias }));
         }
         if (rubros.length > 0) await tx.insert(eventoRubro).values(rubros);
+        if (tipos.length > 0)
+          await tx.insert(eventoTipoCambio).values(tipos.map((t) => ({ eventoId: fila.id, ...t, actualizadoPor: actorId })));
         return fila.id;
       }),
     { ...MENSAJES, fk: "Rubro inválido" },
@@ -85,7 +95,7 @@ export async function monedasUsadas(db: Db | Tx, eventoId: string): Promise<Mone
   const filas = await db.execute<{ moneda: Moneda }>(sql`
     select ${cotizacion.moneda} as moneda from ${cotizacion}
       join ${eventoRubro} on ${eventoRubro.id} = ${cotizacion.eventoRubroId}
-      where ${eventoRubro.eventoId} = ${eventoId}
+      where ${eventoRubro.eventoId} = ${eventoId} and ${cotizacion.estado} <> 'descartada'
     union select ${eventoRubro.presupuestoMoneda} from ${eventoRubro} where ${eventoRubro.eventoId} = ${eventoId}
     union select ${eventoRubro.pagadoMoneda} from ${eventoRubro} where ${eventoRubro.eventoId} = ${eventoId}`);
   // postgres-js devuelve un array; PGlite, { rows }.
@@ -93,7 +103,14 @@ export async function monedasUsadas(db: Db | Tx, eventoId: string): Promise<Mone
   return lista.map((f) => f.moneda).filter((m): m is Moneda => !!m && m !== "ARS").sort();
 }
 
-/** Cierra el evento: tienen que estar los tipos de cambio de todas las monedas que usa. */
+/** Las tareas del evento, para la subconsulta de sus recordatorios. */
+const tareasDe = (db: Db | Tx, eventoId: string) => db.select({ id: tarea.id }).from(tarea).where(eq(tarea.eventoId, eventoId));
+
+/**
+ * Cierra el evento: tienen que estar los tipos de cambio de todas las monedas que usa.
+ * Sus recordatorios pendientes se cancelan: en un evento cerrado las tareas no se pueden
+ * marcar hechas, y los avisos de "vencida" seguirían llegando todos los días.
+ */
 export async function cerrarEvento(db: Db, id: string, actorId: string | null): Promise<void> {
   await db.transaction(async (tx) => {
     const [fila] = await tx.select({ estado: evento.estado }).from(evento).where(eq(evento.id, id)).for("update");
@@ -104,17 +121,47 @@ export async function cerrarEvento(db: Db, id: string, actorId: string | null): 
     const faltan = (await monedasUsadas(tx, id)).filter((m) => m !== "ARS" && tipos[m] === undefined);
     if (faltan.length > 0) throw new ErrorNegocio(`Falta el tipo de cambio de ${faltan.join(", ")}`);
 
-    await tx.update(evento).set({ estado: "cerrado", cerradoPor: actorId, cerradoAt: new Date() }).where(eq(evento.id, id));
+    const ahora = new Date();
+    await tx.update(evento).set({ estado: "cerrado", cerradoPor: actorId, cerradoAt: ahora }).where(eq(evento.id, id));
+    await tx
+      .update(recordatorio)
+      .set({ canceladoAt: ahora })
+      .where(
+        and(
+          inArray(recordatorio.tareaId, tareasDe(tx, id)),
+          isNull(recordatorio.enviadoAt),
+          isNull(recordatorio.canceladoAt),
+        ),
+      );
   });
 }
 
-export async function reabrirEvento(db: Db, id: string): Promise<void> {
-  const filas = await db
-    .update(evento)
-    .set({ estado: "activo", cerradoPor: null, cerradoAt: null })
-    .where(and(eq(evento.id, id), eq(evento.estado, "cerrado")))
-    .returning({ id: evento.id });
-  if (filas.length === 0) throw new ErrorNegocio("El evento no está cerrado");
+/** Reabre el evento y vuelve a programar los recordatorios automáticos de sus tareas pendientes. */
+export async function reabrirEvento(db: Db, id: string, ahora = new Date()): Promise<void> {
+  await db.transaction(async (tx) => {
+    const filas = await tx
+      .update(evento)
+      .set({ estado: "activo", cerradoPor: null, cerradoAt: null })
+      .where(and(eq(evento.id, id), eq(evento.estado, "cerrado")))
+      .returning({ id: evento.id });
+    if (filas.length === 0) throw new ErrorNegocio("El evento no está cerrado");
+
+    const pendientes = await tx
+      .select({ id: tarea.id, fechaLimite: tarea.fechaLimite })
+      .from(tarea)
+      .where(and(eq(tarea.eventoId, id), ne(tarea.estado, "hecha")));
+    const nuevos = pendientes.flatMap((t) =>
+      t.fechaLimite
+        ? recordatoriosAutomaticos(t.fechaLimite, ahora).map((r) => ({
+            tareaId: t.id,
+            origen: "automatico" as const,
+            tipoAutomatico: r.tipo,
+            fechaHora: r.fechaHora,
+          }))
+        : [],
+    );
+    if (nuevos.length > 0) await tx.insert(recordatorio).values(nuevos);
+  });
 }
 
 /** Activos primero; dentro de cada grupo, los más recientes arriba. */

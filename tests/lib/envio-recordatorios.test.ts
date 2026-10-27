@@ -10,9 +10,11 @@ import {
   reclamarEmails,
 } from "@/lib/envio-recordatorios";
 import type { Actor } from "@/lib/permissions";
+import { cerrarEvento, reabrirEvento } from "@/lib/eventos";
 import { cambiarEstadoTarea } from "@/lib/tareas";
 import { crearActores } from "../helpers/actores";
 import { crearDbPrueba } from "../helpers/db";
+import { idVibra } from "../helpers/presupuestos";
 import { AHORA, nuevaTarea, recordatoriosDe } from "../helpers/tareas";
 
 const DIA_10_NUEVE = new Date("2027-03-10T13:00:00Z");
@@ -37,6 +39,21 @@ beforeEach(async () => {
 });
 
 describe("procesarRecordatorios", () => {
+  it("un evento cerrado no manda avisos; al reabrirlo vuelven los automáticos", async () => {
+    const id = await nuevaTarea(db, { fechaLimite: "2027-03-03", responsableId: editor.id });
+    const vibra = await idVibra(db);
+    await cerrarEvento(db, vibra, admin.id);
+
+    expect((await recordatoriosDe(db, id)).map((r) => r.estado)).toEqual(["cancelado"]);
+    for (let dia = 3; dia <= 6; dia++)
+      expect(await procesarRecordatorios(db, new Date(`2027-03-0${dia}T13:00:00Z`))).toBe(0);
+    expect(await notificaciones(db)).toEqual([]);
+
+    await reabrirEvento(db, vibra, new Date("2027-03-06T12:00:00Z"));
+    expect(await procesarRecordatorios(db, new Date("2027-03-07T13:00:00Z"))).toBe(1);
+    expect(await delEditor(db)).toMatchObject({ tareaId: id });
+  });
+
   it("notifica al responsable una sola vez, aunque se corra dos veces", async () => {
     const id = await nuevaTarea(db, { titulo: "Vallas", fechaLimite: "2027-03-10", responsableId: editor.id });
     const tresDiasAntes = new Date("2027-03-07T13:00:00Z");

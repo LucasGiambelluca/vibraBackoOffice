@@ -20,6 +20,7 @@ import { AccionesEstado } from "../../../tareas/acciones-estado";
 import { crearTareaAction } from "../../../tareas/actions";
 import { TareaCampos } from "../../../tareas/tarea-campos";
 import { cargarEvento } from "../evento";
+import { idEntero } from "@/lib/validacion";
 
 const texto = (valor: string | string[] | undefined) => (typeof valor === "string" ? valor : "");
 
@@ -40,7 +41,7 @@ export default async function TareasPage({ params, searchParams }: PageProps<"/e
   const [grupos, usuarios, todas] = await Promise.all([
     listarGrupos(db),
     listarUsuarios(db),
-    listarTareas(db, { eventoId, grupoId: Number(grupo) || undefined, responsableId: responsable || undefined }),
+    listarTareas(db, { eventoId, grupoId: idEntero("").safeParse(grupo).data, responsableId: responsable || undefined }),
   ]);
   const base = `/eventos/${eventoId}/tareas`;
   const tareas = estado ? todas.filter((t) => t.estado === estado) : todas;
@@ -146,7 +147,7 @@ export default async function TareasPage({ params, searchParams }: PageProps<"/e
             <TableBody>
               {tareas.map((t) => {
                 const vencida = t.estado !== "hecha" && !!t.fechaLimite && t.fechaLimite < hoy;
-                const fecha = t.fechaLimite ? `${fechaCorta(t.fechaLimite)}${vencida ? " · vencida" : ""}` : "—";
+                const fecha = t.fechaLimite ? `${fechaCorta(t.fechaLimite, hoy)}${vencida ? " · vencida" : ""}` : "—";
                 return (
                   <TableRow key={t.id}>
                     <TableCell className="whitespace-normal">

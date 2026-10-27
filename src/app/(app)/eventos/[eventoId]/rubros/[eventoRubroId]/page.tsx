@@ -210,7 +210,7 @@ function TarjetaCotizacion({
     { texto: "Precio por día", valor: formatearMonto(c.precioDia, c.moneda) },
     ...(dosDias
       ? [
-          { texto: "Descuento 2 días", valor: `${c.descuento2Dias} %` },
+          { texto: "Descuento 2 días", valor: `${String(c.descuento2Dias).replace(".", ",")} %` },
           { texto: "Ahorro", valor: formatearMonto(c.ahorro, c.moneda) },
         ]
       : []),
@@ -412,7 +412,15 @@ function PresupuestoYPago({
       {editable && (
         <div className="flex flex-wrap gap-2 border-t px-4 py-3">
           <Hoja boton="Editar presupuesto" titulo={`Presupuesto · ${rubro.nombre}`} secundario>
-            <FormAccion accion={editarRubroEventoAction} enviar="Guardar" enviando="Guardando…" className="space-y-5">
+            {/* key: los campos no son controlados; si los datos cambian (otra pestaña, otra
+                acción) el formulario se rearma con los valores nuevos. */}
+            <FormAccion
+              key={`${rubro.presupuesto}|${rubro.presupuestoMoneda}|${rubro.dias}`}
+              accion={editarRubroEventoAction}
+              enviar="Guardar"
+              enviando="Guardando…"
+              className="space-y-5"
+            >
               <input type="hidden" name="eventoRubroId" value={rubro.id} />
               <div className="grid gap-4 sm:grid-cols-3">
                 <Campo id="presupuesto" label="Presupuesto objetivo" ayuda="Vacío = sin presupuesto" className="sm:col-span-2">
@@ -435,7 +443,14 @@ function PresupuestoYPago({
             </FormAccion>
           </Hoja>
           <Hoja boton="Registrar pago" titulo={`Pago · ${rubro.nombre}`} secundario>
-            <FormAccion accion={registrarPagoAction} enviar="Guardar pago" enviando="Guardando…" className="space-y-5">
+            {/* key: p. ej. al aprobar una cotización en USD la moneda por defecto pasa a USD. */}
+            <FormAccion
+              key={`${rubro.pagado}|${rubro.pagadoMoneda ?? aprobada?.moneda}|${rubro.pagadoFecha}|${rubro.pagadoNota}`}
+              accion={registrarPagoAction}
+              enviar="Guardar pago"
+              enviando="Guardando…"
+              className="space-y-5"
+            >
               <input type="hidden" name="eventoRubroId" value={rubro.id} />
               <div className="grid gap-4 sm:grid-cols-3">
                 <Campo id="pagado" label="Monto pagado" ayuda="Vacío = todavía no se pagó" className="sm:col-span-2">

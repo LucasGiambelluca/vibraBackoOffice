@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { borrarDelDisco, conArchivoNuevo, guardarArchivo, hayArchivo, leerArchivo } from "@/lib/archivos-disco";
@@ -53,6 +54,15 @@ describe("guardarArchivo", () => {
     await expect(guardarArchivo(falso)).rejects.toThrow("Solo se aceptan PDF o fotos (JPG, PNG o WebP)");
     const gif = new File([await sharp({ create: { width: 2, height: 2, channels: 3, background: "red" } }).gif().toBuffer()], "x.gif");
     await expect(guardarArchivo(gif)).rejects.toThrow("Solo se aceptan PDF o fotos (JPG, PNG o WebP)");
+  });
+
+  it("rechaza fotos de demasiados píxeles sin decodificarlas (bomba de descompresión)", async () => {
+    // PNG chico al que se le cambia el tamaño declarado a 20.000 × 20.000 en el encabezado.
+    const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: "red" } }).png().toBuffer();
+    png.writeUInt32BE(20_000, 16);
+    png.writeUInt32BE(20_000, 20);
+    png.writeUInt32BE(crc32(png.subarray(12, 29)), 29);
+    await expect(guardarArchivo(new File([png], "bomba.png"))).rejects.toThrow("La foto tiene demasiados píxeles");
   });
 
   it("rechaza lo que supera 10 MB", async () => {

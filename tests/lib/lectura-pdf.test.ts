@@ -126,6 +126,8 @@ describe("aNumero", () => {
     expect(aNumero("12.5")).toBe(12.5);
     expect(aNumero("10%")).toBe(10);
     expect(aNumero("1.234.567")).toBe(1234567);
+    expect(aNumero("0.500")).toBe(0.5);
+    expect(aNumero("0,5")).toBe(0.5);
     expect(aNumero("mil")).toBeNull();
     expect(aNumero(null)).toBeNull();
   });

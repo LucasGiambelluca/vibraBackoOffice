@@ -70,30 +70,46 @@ export async function crearRecordatorioManual(
   ahora = new Date(),
 ): Promise<void> {
   if (datos.fechaHora <= ahora) throw new ErrorNegocio("La fecha tiene que ser futura");
-  const [t] = await db
-    .select({ creadoPor: tarea.creadoPor, estado: tarea.estado, eventoId: tarea.eventoId })
-    .from(tarea)
-    .where(eq(tarea.id, datos.tareaId));
-  if (!t) throw new ErrorNegocio("La tarea no existe");
-  if (!puedeGestionarRecordatorios(actor, t.creadoPor)) throw new ErrorPermiso();
-  await asegurarEventoAbierto(db, t.eventoId);
-  if (t.estado === "hecha") throw new ErrorNegocio("La tarea ya está hecha");
+  // En una transacción con la tarea bloqueada: si en el medio se cierra el evento o se
+  // marca hecha la tarea, se espera y se lee el estado real.
+  await db.transaction(async (tx) => {
+    const [t] = await tx
+      .select({ creadoPor: tarea.creadoPor, estado: tarea.estado, eventoId: tarea.eventoId })
+      .from(tarea)
+      .where(eq(tarea.id, datos.tareaId))
+      .for("update");
+    if (!t) throw new ErrorNegocio("La tarea no existe");
+    if (!puedeGestionarRecordatorios(actor, t.creadoPor)) throw new ErrorPermiso();
+    await asegurarEventoAbierto(tx, t.eventoId);
+    if (t.estado === "hecha") throw new ErrorNegocio("La tarea ya está hecha");
 
-  await db.insert(recordatorio).values({ ...datos, origen: "manual", creadoPor: actor.id });
+    await tx.insert(recordatorio).values({ ...datos, origen: "manual", creadoPor: actor.id });
+  });
 }
 
 export async function cancelarRecordatorio(db: Db, actor: Actor, id: string, ahora = new Date()): Promise<void> {
-  const [r] = await db
-    .select({ origen: recordatorio.origen, creadorTarea: tarea.creadoPor, eventoId: tarea.eventoId })
-    .from(recordatorio)
-    .innerJoin(tarea, eq(recordatorio.tareaId, tarea.id))
-    .where(and(eq(recordatorio.id, id), pendiente));
-  if (!r) throw new ErrorNegocio("El recordatorio no existe o ya no está pendiente");
-  if (r.origen !== "manual") throw new ErrorNegocio("Los recordatorios automáticos no se cancelan a mano");
-  if (!puedeGestionarRecordatorios(actor, r.creadorTarea)) throw new ErrorPermiso();
-  await asegurarEventoAbierto(db, r.eventoId);
+  await db.transaction(async (tx) => {
+    const [r] = await tx
+      .select({
+        origen: recordatorio.origen,
+        creadorTarea: tarea.creadoPor,
+        eventoId: tarea.eventoId,
+        enviadoAt: recordatorio.enviadoAt,
+        canceladoAt: recordatorio.canceladoAt,
+      })
+      .from(recordatorio)
+      .innerJoin(tarea, eq(recordatorio.tareaId, tarea.id))
+      .where(eq(recordatorio.id, id))
+      .for("update", { of: [recordatorio, tarea] });
+    if (!r) throw new ErrorNegocio("El recordatorio no existe o ya no está pendiente");
+    if (r.origen !== "manual") throw new ErrorNegocio("Los recordatorios automáticos no se cancelan a mano");
+    if (!puedeGestionarRecordatorios(actor, r.creadorTarea)) throw new ErrorPermiso();
+    // Antes que "ya no está pendiente": al cerrar el evento sus recordatorios se cancelan.
+    await asegurarEventoAbierto(tx, r.eventoId);
+    if (r.enviadoAt || r.canceladoAt) throw new ErrorNegocio("El recordatorio no existe o ya no está pendiente");
 
-  await db.update(recordatorio).set({ canceladoAt: ahora }).where(eq(recordatorio.id, id));
+    await tx.update(recordatorio).set({ canceladoAt: ahora }).where(eq(recordatorio.id, id));
+  });
 }
 
 export function listarRecordatorios(db: Db, tareaId: string) {

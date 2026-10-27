@@ -105,6 +105,18 @@ describe("con DB", () => {
       const admin = await crearUsuario(db, datos({ rol: "admin" }));
       await expect(cambiarRol(db, admin, "no-existe", "admin")).rejects.toThrow("El usuario no existe");
     });
+
+    it("dos admins que se degradan entre sí: el segundo ya no es admin y no puede", async () => {
+      const a = await crearUsuario(db, datos({ email: "a@vibra.bo", rol: "admin" }));
+      const b = await crearUsuario(db, datos({ email: "b@vibra.bo", rol: "admin" }));
+      const resultados = await Promise.allSettled([cambiarRol(db, a, b, "editor"), cambiarRol(db, b, a, "editor")]);
+      expect(resultados.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect(resultados.find((r) => r.status === "rejected")).toMatchObject({ reason: { message: "Ya no sos admin" } });
+      expect((await db.select().from(user).where(eq(user.role, "admin"))).length).toBe(1);
+      // Y un editor (o un ex admin) no borra a nadie.
+      const editor = (await db.select().from(user).where(eq(user.role, "editor")))[0].id;
+      await expect(borrarUsuario(db, editor, a)).rejects.toThrow("Ya no sos admin");
+    });
   });
 
   describe("borrarUsuario", () => {

@@ -21,8 +21,9 @@ export async function GET(request: Request, ctx: RouteContext<"/api/archivos/[id
     headers: {
       "Content-Type": TIPO_CONTENIDO[extension],
       "Content-Disposition": `${modo}; filename*=UTF-8''${encodeURIComponent(fila.nombre)}`,
-      // El contenido de un id no cambia nunca.
-      "Cache-Control": "private, max-age=31536000, immutable",
+      // Poco tiempo en la caché del navegador: después de cerrar sesión o borrar el archivo
+      // no tiene que seguir a mano en un equipo compartido.
+      "Cache-Control": "private, max-age=600",
       "X-Content-Type-Options": "nosniff",
     },
   });

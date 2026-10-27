@@ -4,14 +4,21 @@ import { LoaderCircle } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Campo } from "@/components/campos";
 import { Input } from "@/components/ui/input";
-import { TIPOS_ACEPTADOS } from "@/lib/limites";
+import { MAX_ARCHIVO, TIPOS_ACEPTADOS } from "@/lib/limites";
 import { leerPdfAction } from "./actions";
 
-/** Pone `valor` en el campo `nombre` del formulario (los campos no son controlados). */
+const NO_SE_PUDO = "No se pudo leer el PDF. Completá los datos a mano.";
+
+/**
+ * Pone `valor` en el campo `nombre` del formulario (los campos no son controlados). Los
+ * ocultos no se tocan: la persona no vería lo que se guarda (p. ej. el descuento por 2 días
+ * en un rubro de 1 día).
+ */
 function completar(form: HTMLFormElement, nombre: string, valor: string | null) {
   const campo = form.elements.namedItem(nombre);
   if (valor === null || !(campo instanceof HTMLInputElement || campo instanceof HTMLSelectElement || campo instanceof HTMLTextAreaElement))
     return;
+  if (campo instanceof HTMLInputElement && campo.type === "hidden") return;
   if (campo instanceof HTMLSelectElement && ![...campo.options].some((o) => o.value === valor)) return;
   campo.value = valor;
 }
@@ -24,13 +31,22 @@ export function AdjuntoCotizacion({ eventoRubroId, conLectura }: { eventoRubroId
   const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null);
   const [leyendo, startTransition] = useTransition();
 
-  function leer(archivo: File, form: HTMLFormElement) {
+  function leer(archivo: File, input: HTMLInputElement, form: HTMLFormElement) {
     const datos = new FormData();
     datos.set("adjunto", archivo);
     datos.set("eventoRubroId", eventoRubroId);
     setMensaje(null);
     startTransition(async () => {
-      const resultado = await leerPdfAction(datos);
+      let resultado;
+      try {
+        resultado = await leerPdfAction(datos);
+      } catch {
+        // Un error inesperado no tiene que tirar la pantalla y perder lo cargado.
+        resultado = { ok: false as const, error: NO_SE_PUDO };
+      }
+      // Mientras se leía, se guardó la cotización (el formulario se limpió) o se eligió otro
+      // archivo: esta respuesta ya no corresponde.
+      if (input.files?.[0] !== archivo) return;
       if (!resultado.ok) {
         setMensaje({ ok: false, texto: resultado.error });
         return;
@@ -56,10 +72,15 @@ export function AdjuntoCotizacion({ eventoRubroId, conLectura }: { eventoRubroId
           type="file"
           accept={TIPOS_ACEPTADOS.join(",")}
           onChange={(e) => {
-            const archivo = e.currentTarget.files?.[0];
-            const form = e.currentTarget.form;
+            const input = e.currentTarget;
+            const archivo = input.files?.[0];
             setMensaje(null);
-            if (conLectura && archivo?.type === "application/pdf" && form) leer(archivo, form);
+            if (!conLectura || archivo?.type !== "application/pdf" || !input.form) return;
+            if (archivo.size > MAX_ARCHIVO) {
+              setMensaje({ ok: false, texto: "El archivo supera los 10 MB" });
+              return;
+            }
+            leer(archivo, input, input.form);
           }}
         />
       </Campo>

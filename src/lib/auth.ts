@@ -1,3 +1,4 @@
+import "server-only";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
@@ -26,5 +27,24 @@ export const auth = betterAuth({
       recibirEmails: { type: "boolean", required: false, defaultValue: true, input: false },
     },
   },
+  session: {
+    // Una sesión robada sirve como mucho 12 horas; se renueva con el uso cada hora.
+    expiresIn: 60 * 60 * 12,
+    updateAge: 60 * 60,
+  },
+  // Siempre activo (Better Auth solo lo activa solo en producción, y el dev server
+  // puede quedar expuesto por un túnel). Las E2E lo apagan: hacen muchos logins seguidos.
+  rateLimit: {
+    enabled: process.env.AUTH_SIN_LIMITE !== "1",
+    window: 60,
+    max: 100,
+    customRules: {
+      // 5 intentos de login cada 15 minutos por IP.
+      "/sign-in/email": { window: 15 * 60, max: 5 },
+      "/change-password": { window: 15 * 60, max: 5 },
+    },
+  },
+  // El nombre lo cambia solo el admin: así nadie se hace pasar por otro.
+  disabledPaths: ["/update-user"],
   plugins: [nextCookies()],
 });

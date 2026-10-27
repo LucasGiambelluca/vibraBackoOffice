@@ -33,7 +33,9 @@ export function aNumero(valor: unknown): number | null {
   const separadores = limpio.match(/[.,]/g)?.length ?? 0;
   const decimales = ultimo === -1 ? "" : limpio.slice(ultimo + 1);
   const repetido = ultimo !== -1 && limpio.split(limpio[ultimo]).length > 2;
-  const esDecimal = ultimo !== -1 && !repetido && !(separadores === 1 && decimales.length === 3);
+  // "0.500" es medio, no quinientos: con parte entera 0 el separador es decimal.
+  const enteroCero = /^-?0*$/.test(limpio.slice(0, ultimo));
+  const esDecimal = ultimo !== -1 && !repetido && (enteroCero || !(separadores === 1 && decimales.length === 3));
   const entero = (esDecimal ? limpio.slice(0, ultimo) : limpio).replace(/[.,]/g, "");
   const n = Number(esDecimal ? `${entero}.${decimales}` : entero);
   return Number.isFinite(n) ? n : null;
@@ -169,7 +171,14 @@ export async function leerCotizacionPdf(
     console.error(
       "Lectura de PDF: respuesta sin datos",
       respuesta.stop_reason,
-      JSON.stringify(respuesta.content.map((b) => (b.type === "thinking" ? { type: "thinking" } : b))).slice(0, 2000),
+      // Solo la forma de la respuesta: el contenido de la cotización no va a los logs.
+      JSON.stringify(
+        respuesta.content.map((b) =>
+          b.type === "tool_use" && b.input && typeof b.input === "object"
+            ? { type: b.type, campos: Object.keys(b.input) }
+            : { type: b.type },
+        ),
+      ),
     );
     throw new ErrorNegocio(NO_SE_PUDO);
   }

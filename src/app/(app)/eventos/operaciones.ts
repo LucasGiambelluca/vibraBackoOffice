@@ -65,8 +65,7 @@ export async function altaEvento(db: Db, actor: Actor, datos: unknown): Promise<
             conPresupuesto: campos.conPresupuesto === "on",
           }
         : { rubros: rubrosElegidos(campos) };
-    id = await crearEvento(db, valores, origen);
-    for (const tipo of tipos) await guardarTipoCambio(db, id, tipo, actor.id);
+    id = await crearEvento(db, valores, origen, tipos, actor.id);
   });
   return resultado.ok ? { ...resultado, id } : resultado;
 }

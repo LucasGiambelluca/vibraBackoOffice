@@ -62,8 +62,8 @@ export default async function GruposPage() {
           <>
             <Hoja boton="Nuevo grupo" titulo="Nuevo grupo">
               <FormAccion accion={crearGrupoAction} enviar="Crear grupo" enviando="Creando…" limpiar className="space-y-5">
-                <Campo id="nuevo-grupo" label="Nombre">
-                  <Input id="nuevo-grupo" name="nombre" required />
+                <Campo id="grupo-nuevo-nombre" label="Nombre">
+                  <Input id="grupo-nuevo-nombre" name="nombre" required />
                 </Campo>
               </FormAccion>
             </Hoja>

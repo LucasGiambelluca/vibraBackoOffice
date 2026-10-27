@@ -3,12 +3,13 @@ import { z } from "zod";
 import type { Db } from "@/db/client";
 import { grupo, rubro } from "@/db/schema";
 import { conRestricciones, ErrorNegocio } from "@/lib/acciones";
+import { idEntero } from "@/lib/validacion";
 
 // Catálogo de rubros de la productora. Cada evento elige cuáles usa (src/lib/evento-rubros.ts).
 
 export const rubroSchema = z.object({
   nombre: z.string("Falta el nombre").trim().min(2, "El nombre es muy corto").max(80, "El nombre es muy largo"),
-  grupoId: z.coerce.number("Grupo inválido").int("Grupo inválido").positive("Grupo inválido"),
+  grupoId: idEntero("Grupo inválido"),
 });
 
 export type DatosRubro = z.infer<typeof rubroSchema>;

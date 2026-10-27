@@ -89,17 +89,18 @@ export function mensajeRecordatorio(
 
 const DIA_SEMANA = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-/** "dd/mm" de una fecha "YYYY-MM-DD". */
-export function fechaCorta(fecha: string): string {
-  return formatearFecha(fecha).slice(0, 5);
+/** "dd/mm" de una fecha "YYYY-MM-DD"; con el año si no es el de `hoy` (p. ej. una tarea vencida hace años). */
+export function fechaCorta(fecha: string, hoy?: string): string {
+  const completa = formatearFecha(fecha);
+  return hoy && fecha.slice(0, 4) !== hoy.slice(0, 4) ? completa : completa.slice(0, 5);
 }
 
 /** Cuándo vence una tarea, dicho como lo diría una persona: "Vence hoy", "Vence mañana", "Jue 29/10". */
 export function cuandoVence(fecha: string, hoy: string): string {
-  if (fecha < hoy) return `Vencida ${fechaCorta(fecha)}`;
+  if (fecha < hoy) return `Vencida ${fechaCorta(fecha, hoy)}`;
   if (fecha === hoy) return "Vence hoy";
   if (fecha === sumarDias(hoy, 1)) return "Vence mañana";
-  return `${DIA_SEMANA[new Date(`${fecha}T00:00:00Z`).getUTCDay()]} ${fechaCorta(fecha)}`;
+  return `${DIA_SEMANA[new Date(`${fecha}T00:00:00Z`).getUTCDay()]} ${fechaCorta(fecha, hoy)}`;
 }
 
 const FECHA_LARGA = new Intl.DateTimeFormat("es-BO", {
